@@ -26,9 +26,9 @@ export class KeyVerifier {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async verify(key: string | null): Promise<Verification> {
+  async verify(key: string | null, clientIp?: string): Promise<Verification> {
     if (!key) return { ok: false, status: 401, message: "Передайте API-ключ: заголовок Authorization: Bearer ak_live_…" };
-    const client = new AsapApiClient(this.baseUrl, key, this.fetchImpl);
+    const client = new AsapApiClient(this.baseUrl, key, this.fetchImpl, undefined, clientIp ? { "x-forwarded-for": clientIp } : {});
     const hit = this.cache.get(key);
     if (hit && hit.expires > this.now()) return { ok: true, me: hit.me, client };
     try {

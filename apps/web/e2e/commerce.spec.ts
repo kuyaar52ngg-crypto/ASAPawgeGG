@@ -1,14 +1,15 @@
 import { expect, test } from "@playwright/test";
+import { addToCart, resetRateLimits } from "./helpers";
 
 /**
  * Commerce flow (zone B): guest cart -> sign-up (cart merge) -> checkout with promo -> sandbox payment -> key delivered.
  * Requires a seeded DB and the sandbox provider (no Platega / RollyPay keys). Run: pnpm --filter @asap/web e2e
  */
 test("guest cart survives sign-up; sandbox payment delivers the key", async ({ page }) => {
+  resetRateLimits();
   const email = `e2e-${Date.now()}@test.local`;
 
-  await page.goto("/product/elden-ring");
-  await page.getByRole("button", { name: /В корзину/ }).first().click();
+  await addToCart(page, "elden-ring");
   await page.goto("/cart");
   await expect(page.getByText("Elden Ring").first()).toBeVisible();
 
@@ -43,7 +44,10 @@ test("guest cart survives sign-up; sandbox payment delivers the key", async ({ p
   await page.getByRole("button", { name: "Оплатить" }).click();
 
   await page.waitForURL(/checkout\/success/);
-  await expect(page.getByText("Заказ выдан!")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Заказ выдан!" })).toBeVisible({ timeout: 30_000 });
+  // keys are not part of the page: they are fetched (and ownership re-checked) when the buyer presses «Показать»
+  expect(await page.content()).not.toMatch(/[A-Z0-9]{4,}-[A-Z0-9]{4,}-[A-Z0-9]{4,}/);
+  await page.getByRole("button", { name: "Показать" }).first().click();
   await expect(page.locator("code").first()).toHaveText(/[A-Z0-9]{4,}-[A-Z0-9]{4,}/);
 });
 

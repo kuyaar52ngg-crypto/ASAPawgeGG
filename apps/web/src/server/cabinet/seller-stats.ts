@@ -40,7 +40,7 @@ export async function getSalesReport(sellerId: string, days: number): Promise<Sa
 
   const [rows, top, viewsRow] = await Promise.all([
     prisma.$queryRaw<{ day: Date; revenue: number; earning: number; orders: number; units: number }[]>(Prisma.sql`
-      SELECT (o."paidAt" AT TIME ZONE 'Europe/Moscow')::date AS day,
+      SELECT ((o."paidAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Moscow')::date AS day,
              COALESCE(SUM(oi.total), 0)::float8 AS revenue,
              COALESCE(SUM(oi."sellerEarning"), 0)::float8 AS earning,
              COUNT(DISTINCT o.id)::float8 AS orders,

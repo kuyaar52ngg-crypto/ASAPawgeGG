@@ -1,5 +1,5 @@
 import "server-only";
-import { prisma, type Prisma } from "@asap/db";
+import { Prisma, prisma } from "@asap/db";
 import { formatRub } from "@asap/shared";
 import { trackEvent } from "@/server/analytics/track";
 import { postLedger, type Tx } from "@/server/ledger/ledger";
@@ -51,6 +51,10 @@ export interface MarkPaidOptions {
  * Run `afterMarkPaid(outcome)` after the transaction commits.
  */
 export async function markPaidTx(tx: Tx, paymentId: string, opts: MarkPaidOptions = {}): Promise<MarkPaidOutcome> {
+  // Lock order: Order BEFORE Payment — the same order cancelOrder / payOrderWithBalance / refundOrder use. Taking them in the
+  // opposite order could deadlock a webhook against an expiring order.
+  const pre = await tx.payment.findUnique({ where: { id: paymentId }, select: { orderId: true } });
+  if (pre?.orderId) await lockRow(tx, "Order", pre.orderId);
   await lockRow(tx, "Payment", paymentId);
   const payment = await tx.payment.findUnique({ where: { id: paymentId } });
   if (!payment) throw new PaymentNotFoundError(paymentId);
@@ -94,7 +98,8 @@ export async function markPaidTx(tx: Tx, paymentId: string, opts: MarkPaidOption
   // reservation integrity: re-reserve what expired in the meantime, otherwise give the money back as balance
   for (const item of order.items) {
     if (item.product.deliveryMode !== "AUTO_STOCK") continue;
-    const reserved = await tx.stockItem.count({ where: { orderItemId: item.id, status: "RESERVED" } });
+    // lock the reserved rows: a concurrent expire_reservations sweep must wait for this transaction instead of freeing them under us
+    const reserved = (await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT id FROM "StockItem" WHERE "orderItemId" = ${item.id} AND status = 'RESERVED' FOR UPDATE`)).length;
     if (reserved >= item.quantity) continue;
     try {
       await reserveStock(tx, { productId: item.productId, variantId: item.variantId, quantity: item.quantity - reserved, orderItemId: item.id, productTitle: item.title });

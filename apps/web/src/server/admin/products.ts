@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { getSetting, prisma, type Prisma } from "@asap/db";
 import { SETTING_KEYS, idSchema, rubToKopecks } from "@asap/shared";
+import { imageUrlSchema } from "@/server/cabinet/images";
 import { notify } from "@/server/notifications";
 import { enqueueJob } from "@/server/worker";
 import { aiComplete } from "./ai";
@@ -74,7 +75,8 @@ const editSchema = z.object({
   platform: z.string().trim().max(40).optional().default(""),
   region: z.string().trim().max(40).optional().default(""),
   tags: z.string().trim().max(400).optional().default(""),
-  coverImage: z.union([z.literal(""), z.string().trim().url("Некорректная ссылка").max(500)]).optional().default(""),
+  // same allow-list as seller images (https hosts configured in next.config.ts, or our own /api/art): any other URL would crash next/image
+  coverImage: z.union([z.literal(""), imageUrlSchema]).optional().default(""),
   isFeatured: z.boolean().default(false),
   /** base price (ignored when the product has variants) */
   price: rubSchema.optional(),

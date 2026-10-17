@@ -193,13 +193,13 @@ export function SupportChat() {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-end px-4 pb-4 sm:px-6 sm:pb-6" data-support-chat>
-      <div className="pointer-events-auto flex flex-col items-end gap-3">
+      <div className="pointer-events-none flex flex-col items-end gap-3">
         <div
           ref={panelRef}
           role="dialog"
           aria-label="Чат поддержки"
           aria-hidden={!open}
-          className={cn("glass flex h-[min(34rem,calc(100dvh-7rem))] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card/95 shadow-2xl backdrop-blur-xl sm:w-[24rem]", !open && "invisible")}
+          className={cn("glass flex h-[min(34rem,calc(100dvh-7rem))] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card/95 shadow-2xl backdrop-blur-xl sm:w-[24rem]", open ? "pointer-events-auto" : "invisible")}
           style={{ opacity: 0 }}
         >
           <header className="flex items-center gap-3 border-b border-border px-4 py-3">
@@ -293,7 +293,7 @@ export function SupportChat() {
           }}
           aria-expanded={open}
           aria-label={open ? "Закрыть чат поддержки" : "Открыть чат поддержки"}
-          className="gradient-brand relative grid size-14 place-items-center rounded-full text-white shadow-[0_10px_30px_-8px_var(--glow-violet)] transition hover:brightness-110"
+          className="gradient-brand pointer-events-auto relative grid size-14 place-items-center rounded-full text-white shadow-[0_10px_30px_-8px_var(--glow-violet)] transition hover:brightness-110"
         >
           {open ? <X className="size-6" /> : <MessageCircle className="size-6" />}
           {unread && !open && <span className="absolute right-0.5 top-0.5 size-3 rounded-full border-2 border-background bg-success" />}

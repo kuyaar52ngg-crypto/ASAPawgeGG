@@ -12,6 +12,7 @@ x-env: &app-env
   STOCK_ENCRYPTION_KEY: ${STOCK_ENCRYPTION_KEY:?set STOCK_ENCRYPTION_KEY in .env}
   WORKER_URL: http://worker:8000
   WORKER_INTERNAL_TOKEN: ${WORKER_INTERNAL_TOKEN:?set WORKER_INTERNAL_TOKEN in .env}
+  TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
   WEB_INTERNAL_URL: http://web:3000
   PLATEGA_MERCHANT_ID: ${PLATEGA_MERCHANT_ID:-}
   PLATEGA_SECRET: ${PLATEGA_SECRET:-}
@@ -19,7 +20,7 @@ x-env: &app-env
   ROLLYPAY_API_KEY: ${ROLLYPAY_API_KEY:-}
   ROLLYPAY_SECRET: ${ROLLYPAY_SECRET:-}
   ROLLYPAY_API_URL: ${ROLLYPAY_API_URL:-https://api.rollypay.io}
-  SANDBOX_WEBHOOK_SECRET: ${SANDBOX_WEBHOOK_SECRET:-dev-sandbox-webhook-secret}
+  SANDBOX_WEBHOOK_SECRET: ${SANDBOX_WEBHOOK_SECRET:-}
   ALLOW_SANDBOX_PAYMENTS: ${ALLOW_SANDBOX_PAYMENTS:-}
   PLATEGA_CREATE_PATH: ${PLATEGA_CREATE_PATH:-/transaction/process}
   PLATEGA_STATUS_PATH: ${PLATEGA_STATUS_PATH:-/transaction/{id}}
@@ -51,7 +52,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-asap}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-asap}
       POSTGRES_DB: ${POSTGRES_DB:-asapawge}
-    ports: ["5432:5432"]
+    # bound to loopback only: the database must never be reachable from the internet
+    ports: ["127.0.0.1:5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-asap} -d ${POSTGRES_DB:-asapawge}"]
@@ -63,7 +65,8 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
-    ports: ["6379:6379"]
+    # loopback only (Redis has no password)
+    ports: ["127.0.0.1:6379:6379"]
     volumes: [redisdata:/data]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -91,7 +94,8 @@ services:
     build: { context: apps/worker }
     restart: unless-stopped
     environment: *app-env
-    ports: ["8000:8000"]
+    # internal job API (token protected) — web reaches it over the compose network; do not expose publicly
+    ports: ["127.0.0.1:8000:8000"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

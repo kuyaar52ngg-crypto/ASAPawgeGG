@@ -11,6 +11,7 @@
     "start:dist": "node dist/http.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
+    "smoke": "tsx scripts/smoke.ts",
     "inspect": "npx @modelcontextprotocol/inspector"
   },
   "dependencies": {

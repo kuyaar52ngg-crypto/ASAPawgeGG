@@ -6,7 +6,7 @@ import { formatRub } from "@asap/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { SecretList } from "@/components/commerce/secret-list";
+import { RevealSecrets } from "@/components/cabinet/reveal-secrets";
 import { StatusPoller } from "@/components/commerce/status-poller";
 import { requireUser } from "@/server/auth/session";
 import { getOrderDelivery } from "@/server/orders/delivery";
@@ -71,7 +71,8 @@ async function OrderResult({ orderId, userId }: { orderId: string; userId: strin
                 {d.variantTitle && <Badge variant="default">{d.variantTitle}</Badge>}
                 <Badge variant={d.status === "DELIVERED" ? "success" : "warning"}>{d.status === "DELIVERED" ? "выдан" : "в работе"}</Badge>
               </div>
-              {d.secrets.length > 0 && <SecretList secrets={d.secrets} />}
+              {/* plaintext keys never enter the page/RSC payload: they are fetched on «Показать» (ownership re-checked server-side) */}
+              {d.secrets.length > 0 && <RevealSecrets orderItemId={d.orderItemId} count={d.secrets.length} />}
               {d.secrets.length === 0 && d.status === "DELIVERED" && typeof d.deliveryData?.message === "string" && <p className="text-sm text-muted-foreground">{d.deliveryData.message}</p>}
               {d.secrets.length === 0 && d.status === "DELIVERED" && d.deliveryData?.provider != null && (
                 <p className="text-sm text-muted-foreground">

@@ -12,6 +12,9 @@ import { OutOfStockError, reserveStock } from "./stock";
 import { releaseExpiredReservationsThrottled } from "./maintenance";
 import { enqueueJob } from "@/server/worker";
 
+/** Unpaid (PENDING) orders one buyer may hold at the same time (each one reserves stock for the payment window). */
+export const MAX_PENDING_ORDERS = 5;
+
 /** Expected, user-facing checkout problem (Russian message). */
 export class CheckoutError extends Error {
   constructor(
@@ -93,13 +96,20 @@ export async function createOrderFromItems(input: CreateOrderInput, sourceItems:
   await releaseExpiredReservationsThrottled();
   if (sourceItems.length === 0) throw new CheckoutError("Корзина пуста", "EMPTY_CART");
 
+  // stock-hoarding guard: unpaid orders hold reserved keys, so one account may only keep a few of them open at once
+  const openOrders = await prisma.order.count({ where: { buyerId: input.userId, status: "PENDING" } });
+  if (openOrders >= MAX_PENDING_ORDERS) {
+    throw new CheckoutError(`У вас уже ${openOrders} неоплаченных заказов. Оплатите или отмените их в разделе «Мои заказы», затем оформите новый.`, "UNAVAILABLE");
+  }
+
   const defaultBps = await getSetting<number>(SETTING_KEYS.commissionDefaultBps, env.commissionDefaultBps);
   const steamFee = sourceItems.some((i) => i.product.type === "TOPUP") ? await getSteamFeePercent() : undefined;
 
   // ── validate & price lines ──
   const lines = sourceItems.map((ci) => {
     const p = ci.product;
-    if (p.status !== "ACTIVE" || p.seller.banned) throw new CheckoutError(`«${p.title}» больше не продаётся — удалите его из корзины`, "UNAVAILABLE");
+    const sellerStatus = p.seller.sellerProfile?.status;
+    if (p.status !== "ACTIVE" || p.seller.banned || sellerStatus === "SUSPENDED" || sellerStatus === "REJECTED") throw new CheckoutError(`«${p.title}» больше не продаётся — удалите его из корзины`, "UNAVAILABLE");
     if (p.sellerId === input.userId) throw new CheckoutError("Нельзя купить собственный товар", "OWN_PRODUCT");
     if (ci.variant && (!ci.variant.isActive || ci.variant.productId !== p.id)) throw new CheckoutError(`«${p.title}»: вариант больше не продаётся`, "UNAVAILABLE");
     if (ci.quantity < 1 || ci.quantity > MAX_LINE_QTY) throw new CheckoutError(`«${p.title}»: некорректное количество`, "UNAVAILABLE");
@@ -147,6 +157,8 @@ export async function createOrderFromItems(input: CreateOrderInput, sourceItems:
       const order = await prisma.$transaction(
         async (tx) => {
           if (promoCodeId) {
+            // serialise concurrent checkouts with the same code: the second one waits here and then sees the first one's order
+            await tx.$queryRaw`SELECT id FROM "PromoCode" WHERE id = ${promoCodeId} FOR UPDATE`;
             const recheck = await validatePromo(input.promoCode!, input.userId, subtotal, lines.length, tx);
             if (!recheck.ok) throw new CheckoutError(recheck.error ?? "Промокод недействителен", "PROMO");
           }

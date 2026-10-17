@@ -8,6 +8,8 @@ import { z } from "zod";
 export const ALLOWED_IMAGE_HOSTS = ["picsum.photos", "fastly.picsum.photos", "placehold.co", "images.unsplash.com", "cdn.cloudflare.steamstatic.com", "shared.fastly.steamstatic.com"] as const;
 
 export function isAllowedImageUrl(raw: string): boolean {
+  // Own generated artwork (seeded catalog) is always fine.
+  if (/^\/api\/art\/[a-z0-9-]+\/(cover|avatar|[123])$/i.test(raw)) return true;
   try {
     const u = new URL(raw);
     return u.protocol === "https:" && (ALLOWED_IMAGE_HOSTS as readonly string[]).includes(u.hostname);

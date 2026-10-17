@@ -38,6 +38,8 @@ export class AsapApiClient {
     private readonly apiKey: string,
     private readonly fetchImpl: FetchLike = (i, init) => fetch(i, init),
     private readonly timeoutMs = 30_000,
+    /** extra headers on every call, e.g. `x-forwarded-for` = the MCP caller's address so the web app rate-limits per caller, not per MCP server */
+    private readonly extraHeaders: Record<string, string> = {},
   ) {}
 
   async request<T>(method: "GET" | "POST", path: string, opts: RequestOptions = {}): Promise<T> {
@@ -47,7 +49,7 @@ export class AsapApiClient {
     try {
       res = await this.fetchImpl(url.toString(), {
         method,
-        headers: { authorization: `Bearer ${this.apiKey}`, accept: "application/json", "user-agent": "asapawge-mcp/1.0", ...(opts.body !== undefined ? { "content-type": "application/json" } : {}), ...opts.headers },
+        headers: { authorization: `Bearer ${this.apiKey}`, accept: "application/json", "user-agent": "asapawge-mcp/1.0", ...this.extraHeaders, ...(opts.body !== undefined ? { "content-type": "application/json" } : {}), ...opts.headers },
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
         signal: AbortSignal.timeout(this.timeoutMs),
       });

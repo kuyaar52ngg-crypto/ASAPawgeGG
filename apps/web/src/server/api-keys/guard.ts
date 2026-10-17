@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import type { ApiScope } from "@asap/shared";
-import { jsonError } from "@/lib/api";
+import { jsonError, limitByIp } from "@/lib/api";
 import { authenticateApiKey, type ApiPrincipal } from "./authenticate";
 import { hasScope } from "./core";
 
@@ -21,6 +21,11 @@ export function apiRoute<P = Record<string, string>>(opts: { scope: ApiScope | r
   return async (req: Request, routeCtx: RouteCtx<P>): Promise<NextResponse | Response> => {
     const auth = await authenticateApiKey(req);
     if (!auth.ok) {
+      // key-guessing / credential-stuffing guard: repeated 401s from one IP are throttled (each attempt costs a DB lookup)
+      if (auth.status === 401) {
+        const limited = await limitByIp(req, "apiv1-auth-fail", 30, 60);
+        if (limited) return limited;
+      }
       const res = jsonError(auth.status, auth.code, auth.message);
       if (auth.status === 401) res.headers.set("WWW-Authenticate", 'Bearer realm="asapawge-api"');
       if (auth.retryAfter) res.headers.set("Retry-After", String(auth.retryAfter));

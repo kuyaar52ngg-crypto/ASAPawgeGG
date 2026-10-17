@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@node-rs/argon2", "ioredis", "pg", "@prisma/client", "@prisma/adapter-pg"],
   poweredByHeader: false,
   images: {
+    // Generated SVG artwork (/api/art/*) is served through next/image as-is
+    dangerouslyAllowSVG: true,
+    contentDispositionType: "inline",
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     remotePatterns: [
       { protocol: "https", hostname: "picsum.photos" },
       { protocol: "https", hostname: "fastly.picsum.photos" },
@@ -35,6 +39,9 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          // honoured by browsers on https only; harmless on plain-http localhost
+          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
         ],
       },
     ];

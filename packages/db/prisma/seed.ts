@@ -135,7 +135,7 @@ async function main() {
         sellerProfile: {
           create: {
             shopName: s.shop, slug: slugify(s.shop), description: s.desc, status: "VERIFIED", commissionBps: s.bps, verifiedAt: daysAgo(95),
-            avatar: `https://picsum.photos/seed/${slugify(s.shop)}-avatar/200/200`,
+            avatar: `/api/art/${slugify(s.shop)}-avatar/avatar`,
             payoutDetails: { method: "CARD", card: "4276 **** **** 1234" },
           },
         },
@@ -194,14 +194,14 @@ async function main() {
           ? "Исполнение автоматическое через поставщика, обычно занимает 1–5 минут."
           : "Исполняется продавцом вручную, обычно в течение 15–30 минут. Статус можно отслеживать в личном кабинете.";
     const description = `${sp.blurb}\n\n${regionTxt}${deliveryTxt}\n\nГарантия: если товар не подошёл — откройте спор в карточке заказа, поддержка и модераторы площадки помогут решить вопрос. Деньги продавцу переводятся только после подтверждения.`;
-    const images = [`https://picsum.photos/seed/${slug}-1/1280/720`, `https://picsum.photos/seed/${slug}-2/1280/720`, `https://picsum.photos/seed/${slug}-3/1280/720`];
+    const images = [`/api/art/${slug}/1`, `/api/art/${slug}/2`, `/api/art/${slug}/3`];
     const publishedAt = status === "ACTIVE" || status === "ARCHIVED" ? daysAgo(rint(65, 95)) : null;
     await prisma.product.create({
       data: {
         id, slug, title: sp.title, shortDescription: sp.blurb.slice(0, 160), description, type: sp.type, deliveryMode: sp.delivery, status,
         sellerId: sellers[sp.seller]!.user.id, categoryId: catIdBySlug.get(sp.category)!,
         price, oldPrice: oldPrice ?? null, platform: sp.platform ?? null, region: sp.region ?? null,
-        coverImage: `https://picsum.photos/seed/${slug}/600/800`, images, tags: sp.tags ?? [], isFeatured: sp.featured ?? false,
+        coverImage: `/api/art/${slug}/cover`, images, tags: sp.tags ?? [], isFeatured: sp.featured ?? false,
         moderationNote: sp.moderationNote ?? null, publishedAt, createdAt: publishedAt ?? daysAgo(rint(1, 10)),
         aiModeration: status === "PENDING_REVIEW" ? { score: 72, verdict: "review", reasons: ["Требуется проверка описания"] } : status === "REJECTED" ? { score: 5, verdict: "reject", reasons: ["Запрещённая категория услуг"] } : undefined,
         variants: { create: variants.map((vr, i) => ({ id: vr.id, title: vr.title, price: vr.price, oldPrice: vr.oldPrice ?? null, sortOrder: i, attributes: (vr.seed.attributes ?? undefined) as never, providerSku: vr.seed.providerSku ?? null })) },

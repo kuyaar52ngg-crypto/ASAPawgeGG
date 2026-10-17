@@ -23,6 +23,15 @@ export const trackBodySchema = analyticsEventSchema.extend({
 });
 export type TrackBody = z.infer<typeof trackBodySchema>;
 
+/**
+ * Events a browser may report. Everything that represents a business fact (sign_up, login, balance top-up, review, dispute)
+ * is written by the server at the moment it happens — accepting it from clients would let anyone inflate the admin funnel.
+ * `purchase` is accepted only for the signed-in buyer's own PAID order (see ingestClientEvent).
+ */
+export const CLIENT_EVENT_NAMES: ReadonlySet<string> = new Set([
+  "page_view", "view_item", "search", "add_to_cart", "remove_from_cart", "begin_checkout", "add_payment_info", "purchase", "steam_topup_start", "favorite_add", "ai_chat_message",
+]);
+
 const BOT_RE = /bot|crawl|spider|slurp|headless|lighthouse|facebookexternalhit|preview|monitor|curl|wget|python-requests/i;
 export function isBot(userAgent: string | null | undefined): boolean {
   return !userAgent || BOT_RE.test(userAgent);
@@ -86,6 +95,7 @@ export async function ingestClientEvent(args: {
 }): Promise<IngestResult> {
   const { body, sessionId, userId, userAgent } = args;
   if (isBot(userAgent)) return { stored: false, reason: "bot" };
+  if (!CLIENT_EVENT_NAMES.has(body.name)) return { stored: false, reason: "invalid" };
   const path = cleanPath(body.path);
   if (!isTrackablePath(path)) return { stored: false, reason: "path" };
   const properties = sanitizeProperties(body.properties);
@@ -101,7 +111,9 @@ export async function ingestClientEvent(args: {
 
   if (body.name === "purchase") {
     const orderId = (properties as Record<string, unknown> | undefined)?.orderId;
-    if (typeof orderId !== "string" || !orderId) return { stored: false, reason: "invalid" };
+    if (typeof orderId !== "string" || !orderId || !userId) return { stored: false, reason: "invalid" };
+    const own = await prisma.order.findFirst({ where: { id: orderId, buyerId: userId, paidAt: { not: null } }, select: { id: true } });
+    if (!own) return { stored: false, reason: "invalid" };
     const exists = await prisma.analyticsEvent.findFirst({ where: { name: "purchase", properties: { path: ["orderId"], equals: orderId } }, select: { id: true } });
     if (exists) return { stored: false, reason: "duplicate" };
   }

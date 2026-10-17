@@ -122,6 +122,20 @@ def heuristic_moderation(f: ProductFacts, categories: list[tuple[str, str]]) -> 
     return {"score": score, "verdict": verdict, "reasons": reasons[:6], "suggested_category": suggestion}
 
 
+def apply_hard_rules(f: ProductFacts, verdict: dict[str, Any]) -> dict[str, Any]:
+    """Deterministic guard applied on TOP of any LLM verdict (the listing text is attacker-controlled, so a prompt-injected
+    "approve" must not be able to publish prohibited goods or off-platform contacts). Can only make a verdict stricter."""
+    text = f"{f.title}\n{f.short_description or ''}\n{f.description}"
+    for pattern, reason in PROHIBITED:
+        if pattern.search(text):
+            reasons = [reason, *[r for r in verdict.get("reasons", []) if r != reason]][:6]
+            return {**verdict, "score": min(int(verdict["score"]), 5), "verdict": "reject", "reasons": reasons}
+    if verdict["verdict"] == "approve" and CONTACTS.search(text):
+        reasons = ["Контакты или внешние ссылки в описании (сделки только через площадку)", *verdict.get("reasons", [])][:6]
+        return {**verdict, "score": min(int(verdict["score"]), 60), "verdict": "review", "reasons": reasons}
+    return verdict
+
+
 def normalize_moderation(raw: dict[str, Any], valid_slugs: set[str]) -> dict[str, Any]:
     try:
         score = int(round(float(raw["score"])))

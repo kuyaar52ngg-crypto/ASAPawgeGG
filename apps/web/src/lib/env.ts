@@ -6,10 +6,24 @@ import "server-only";
  */
 const e = process.env;
 
+/** Value shipped in .env.example — must never protect a real deployment. */
+export const DEV_SANDBOX_WEBHOOK_SECRET = "dev-sandbox-webhook-secret";
+
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+const appUrl = e.APP_URL ?? e.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
 export const env = {
   nodeEnv: e.NODE_ENV ?? "development",
   isProd: e.NODE_ENV === "production",
-  appUrl: e.APP_URL ?? e.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  appUrl,
+  /** true when the app is served from localhost (local stack / CI); false for a real public deployment */
+  isLocalApp: ["localhost", "127.0.0.1", "[::1]", "::1"].includes(hostnameOf(appUrl)),
   databaseUrl: e.DATABASE_URL ?? "postgresql://asap:asap@localhost:5432/asapawge",
   redisUrl: e.REDIS_URL ?? "redis://localhost:6379",
   workerUrl: e.WORKER_URL ?? "http://localhost:8000",
@@ -43,7 +57,7 @@ export const env = {
       return Boolean(this.apiKey && this.secret);
     },
   },
-  sandboxWebhookSecret: e.SANDBOX_WEBHOOK_SECRET ?? "dev-sandbox-webhook-secret",
+  sandboxWebhookSecret: e.SANDBOX_WEBHOOK_SECRET || DEV_SANDBOX_WEBHOOK_SECRET,
   /** "1"/"0" forces the sandbox ("Тестовая оплата") on/off. Unset => on in dev, and in prod only while no real gateway is configured. */
   allowSandboxPayments: e.ALLOW_SANDBOX_PAYMENTS,
 

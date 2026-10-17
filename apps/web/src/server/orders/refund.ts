@@ -37,6 +37,8 @@ export async function refundOrder(orderId: string, opts: RefundOptions): Promise
   const result = await prisma.$transaction(
     async (tx) => {
       await lockRow(tx, "Order", orderId);
+      // the worker's release_holds locks single OrderItems (not the Order): lock them too so `holdReleased` is read consistently
+      await tx.$queryRaw`SELECT id FROM "OrderItem" WHERE "orderId" = ${orderId} FOR UPDATE`;
       const order = await tx.order.findUnique({ where: { id: orderId }, include: { items: { include: { stockItems: { select: { id: true, status: true } } } } } });
       if (!order) return { ok: false, error: "Заказ не найден" } as const;
       if (!order.paidAt) return { ok: false, error: "Заказ не был оплачен" } as const;

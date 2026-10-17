@@ -1,14 +1,24 @@
 import "server-only";
 import { getSetting } from "@asap/db";
 import { SETTING_KEYS } from "@asap/shared";
-import { env } from "@/lib/env";
+import { DEV_SANDBOX_WEBHOOK_SECRET, env } from "@/lib/env";
 import { PlategaProvider } from "./platega";
 import { RollyPayProvider } from "./rollypay";
 import { SandboxProvider } from "./sandbox";
 import type { GatewayId, PaymentChoice, PaymentProvider, PaymentSubMethod } from "./types";
 
+/**
+ * A public production deployment must not accept sandbox webhooks signed with the well-known dev secret
+ * (anyone could forge a "payment succeeded" event). Localhost deployments (local stack, CI, e2e) are exempt.
+ */
+export function sandboxSecretIsInsecure(): boolean {
+  if (!env.isProd || env.isLocalApp) return false;
+  return env.sandboxWebhookSecret === DEV_SANDBOX_WEBHOOK_SECRET || env.sandboxWebhookSecret.length < 16;
+}
+
 /** Sandbox is allowed in dev, and in production only while no real gateway is configured (or when forced with ALLOW_SANDBOX_PAYMENTS=1). */
 export function isSandboxAllowed(): boolean {
+  if (sandboxSecretIsInsecure()) return false;
   const forced = env.allowSandboxPayments;
   if (forced === "1" || forced === "true") return true;
   if (forced === "0" || forced === "false") return false;

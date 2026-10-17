@@ -79,7 +79,7 @@ export function RevenueChart({ data }: { data: DayPoint[] }) {
         </defs>
         <CartesianGrid stroke={C.grid} strokeDasharray="3 4" vertical={false} />
         <XAxis dataKey="date" tickFormatter={dayFmt} tick={{ fill: C.text, fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={24} />
-        <YAxis yAxisId="money" tickFormatter={(v: number) => compact.format(v / 100)} tick={{ fill: C.text, fontSize: 11 }} tickLine={false} axisLine={false} width={44} />
+        <YAxis yAxisId="money" tickFormatter={(v: number) => compact.format(v / 100)} tick={{ fill: C.text, fontSize: 11 }} tickLine={false} axisLine={false} width={60} />
         <YAxis yAxisId="orders" orientation="right" allowDecimals={false} tick={{ fill: C.text, fontSize: 11 }} tickLine={false} axisLine={false} width={32} />
         <Tooltip
           cursor={{ stroke: C.grid }}

@@ -122,7 +122,9 @@
 
 @layer base {
   * { @apply border-border; }
-  html { scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
+  /* Grids without explicit columns (mobile) must be able to shrink below min-content, otherwise wide children (tables, charts) stretch the page. */
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  html { scroll-behavior: smooth; scroll-padding-top: 5.5rem; scroll-padding-bottom: 6rem; -webkit-tap-highlight-color: transparent; }
   body {
     @apply bg-background text-foreground font-sans antialiased;
     min-height: 100dvh;

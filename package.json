@@ -25,7 +25,12 @@
     "db:reset": "pnpm --filter @asap/db reset",
     "db:studio": "pnpm --filter @asap/db studio",
     "services:start": "bash scripts/services.sh start",
-    "services:stop": "bash scripts/services.sh stop"
+    "services:stop": "bash scripts/services.sh stop",
+    "e2e": "pnpm --filter @asap/web e2e",
+    "screenshots": "node apps/web/e2e/screenshots.mjs",
+    "stack:start": "bash scripts/dev-stack.sh start",
+    "stack:stop": "bash scripts/dev-stack.sh stop",
+    "verify": "bash scripts/verify.sh"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

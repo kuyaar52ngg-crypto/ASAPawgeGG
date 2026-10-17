@@ -63,7 +63,7 @@ async def ai_moderate_product_impl(factory: SessionFactory, product_id: str, *, 
         log_input={"productId": product_id, "title": facts.title, "type": facts.type, "price": facts.price, "descriptionLength": len(facts.description)},
         chain=chain,
     )
-    v = res.data
+    v = mod_ai.apply_hard_rules(facts, res.data)  # an LLM (or an injected description) can never override the prohibited-content rules
     approved = v["verdict"] == "approve" and v["score"] >= threshold
 
     async with session_scope(factory) as s:

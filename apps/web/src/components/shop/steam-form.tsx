@@ -109,11 +109,13 @@ export function SteamForm({ feePercent, rub, kzt, initialAmount, sandbox }: { fe
           </Tabs>
           <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" />
-            Валюта определяется регионом вашего аккаунта Steam. Для аккаунтов с USD-кошельком выберите{" "}
-            <Link href="/catalog/podarochnye-karty" className="text-primary hover:underline">
-              подарочную карту Steam
-            </Link>
-            .
+            <span>
+              Валюта определяется регионом вашего аккаунта Steam. Для аккаунтов с USD-кошельком выберите{" "}
+              <Link href="/catalog/podarochnye-karty" className="text-primary hover:underline">
+                подарочную карту Steam
+              </Link>
+              .
+            </span>
           </p>
         </div>
       )}

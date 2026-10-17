@@ -20,7 +20,7 @@ export function DashboardShell({ title, nav, children }: { title: string; nav: N
   const pathname = usePathname();
   const isActive = (i: NavItem) => (i.exact ? pathname === i.href : pathname === i.href || pathname.startsWith(i.href + "/"));
   return (
-    <div className="container-page grid gap-6 py-6 lg:grid-cols-[250px_1fr] lg:py-8">
+    <div className="container-page grid grid-cols-[minmax(0,1fr)] gap-6 py-6 lg:grid-cols-[250px_minmax(0,1fr)] lg:py-8">
       <aside className="lg:sticky lg:top-24 lg:self-start">
         <p className="mb-3 px-3 font-display text-sm font-semibold text-muted-foreground">{title}</p>
         <nav className="no-scrollbar glass flex gap-1 overflow-x-auto rounded-2xl p-2 lg:flex-col lg:overflow-visible">

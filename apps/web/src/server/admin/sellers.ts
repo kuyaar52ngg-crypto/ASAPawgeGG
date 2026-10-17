@@ -40,7 +40,7 @@ export async function reviewSeller(ctx: AdminCtx, input: unknown) {
     result.to === "VERIFIED"
       ? { title: "Магазин подтверждён", body: `Магазин «${result.shopName}» прошёл проверку — можно публиковать товары.`, link: "/seller" }
       : result.to === "REJECTED"
-        ? { title: "Заявка продавца отклонена", body: `Причина: ${reason}`, link: "/seller" }
+        ? { title: "Заявка продавца отклонена", body: `Причина: ${reason}`, link: "/account/become-seller" }
         : { title: "Магазин приостановлен", body: `Причина: ${reason}`, link: "/seller" };
   await notify(result.userId, { type: "SYSTEM", ...msg }).catch(() => {});
   return ok();

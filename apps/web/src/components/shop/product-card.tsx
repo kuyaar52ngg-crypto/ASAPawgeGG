@@ -49,9 +49,9 @@ export function ProductCard({ p, priority = false, className }: { p: ProductCard
 
       <div className="flex flex-1 flex-col gap-2 p-3.5">
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>{PRODUCT_TYPE_LABELS[p.type]}</span>
+          <span className="min-w-0 truncate">{PRODUCT_TYPE_LABELS[p.type]}</span>
           {p.deliveryMode === "AUTO_STOCK" && p.inStock && (
-            <span className="inline-flex items-center gap-1 text-success">
+            <span className="inline-flex shrink-0 items-center gap-1 text-success">
               <Zap className="size-3" /> Мгновенно
             </span>
           )}

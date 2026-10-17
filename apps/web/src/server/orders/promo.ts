@@ -27,7 +27,12 @@ export async function validatePromo(rawCode: string, userId: string, subtotal: n
   const promo = await db.promoCode.findUnique({ where: { code } });
   if (!promo || !promo.isActive) return { ok: false, error: "Промокод не найден или отключён" };
   if (promo.expiresAt && promo.expiresAt.getTime() < Date.now()) return { ok: false, error: "Срок действия промокода истёк" };
-  if (promo.maxUses != null && promo.usedCount >= promo.maxUses) return { ok: false, error: "Лимит использований промокода исчерпан" };
+  if (promo.maxUses != null) {
+    // usedCount only grows when an order is PAID: unpaid orders holding the code count as reservations, otherwise N parallel
+    // checkouts could all pass the check and exceed maxUses once they are paid
+    const reserved = await db.order.count({ where: { promoCodeId: promo.id, status: "PENDING" } });
+    if (promo.usedCount + reserved >= promo.maxUses) return { ok: false, error: "Лимит использований промокода исчерпан" };
+  }
   if (subtotal < promo.minOrder) {
     return { ok: false, error: `Промокод действует для заказов от ${Math.ceil(promo.minOrder / 100)} ₽` };
   }

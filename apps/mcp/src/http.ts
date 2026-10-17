@@ -23,6 +23,13 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+/** Caller address for per-caller rate limiting upstream: last X-Forwarded-For entry (appended by our reverse proxy), else the socket peer. */
+export function callerIp(req: IncomingMessage): string | undefined {
+  const xff = req.headers["x-forwarded-for"];
+  const raw = (Array.isArray(xff) ? xff.join(",") : xff)?.split(",").map((s) => s.trim()).filter(Boolean).at(-1) ?? req.socket.remoteAddress;
+  return raw && /^[0-9a-fA-F:.]{2,45}$/.test(raw) ? raw : undefined;
+}
+
 export function createHttpApp(apiBase = resolveApiBase()) {
   const verifier = new KeyVerifier(apiBase);
 
@@ -33,7 +40,7 @@ export function createHttpApp(apiBase = resolveApiBase()) {
     // stateless transport: only POST carries JSON-RPC; no server-initiated streams (GET) and no sessions (DELETE)
     if (req.method !== "POST") return send(res, 405, rpcError(-32000, "Method not allowed. Use POST /mcp (Streamable HTTP, stateless)."), { allow: "POST" });
 
-    const auth = await verifier.verify(extractKey(req.headers));
+    const auth = await verifier.verify(extractKey(req.headers), callerIp(req));
     if (!auth.ok) {
       return send(res, auth.status === 502 ? 502 : auth.status, rpcError(-32001, auth.message), auth.status === 401 ? { "www-authenticate": 'Bearer realm="asapawge-mcp"' } : {});
     }

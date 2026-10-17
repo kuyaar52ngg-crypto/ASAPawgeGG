@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// Requires the seeded demo data (pnpm db:seed). Browser binaries are not installable in the dev sandbox:
-// these specs are written for CI / local machines with `npx playwright install chromium`.
+// Requires the seeded demo data (pnpm db:seed) and the running stack (see playwright.config.ts).
 
 async function login(page: Page, email: string, password: string, to: string) {
   await page.goto(`/sign-in?callbackUrl=${encodeURIComponent(to)}`);
@@ -42,8 +41,8 @@ test("seller creates a draft product", async ({ page }) => {
   await login(page, "seller@asapawge.gg", "Seller123!", "/seller/products/new");
   await page.getByLabel("Название", { exact: true }).fill("E2E draft product");
   await page.getByLabel("Полное описание").fill("Описание тестового товара для проверки формы создания карточки продавцом.");
-  await page.getByLabel("Цена, ₽").fill("999");
-  await page.getByRole("combobox").first().click();
+  await page.locator("#p-price").fill("999");
+  await page.locator("#p-category").click();
   await page.getByRole("option").first().click();
   await page.getByRole("button", { name: "Сохранить черновик" }).click();
   await expect(page).toHaveURL(/\/seller\/products\/.+\/edit/);

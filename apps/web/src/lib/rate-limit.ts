@@ -20,11 +20,16 @@ export async function rateLimit(opts: { key: string; limit: number; windowSec: n
   const k = `rl:${key}`;
   try {
     const count = await redis.incr(k);
-    if (count === 1) await redis.expire(k, windowSec);
-    const ttl = await redis.ttl(k);
+    let ttl = await redis.ttl(k);
+    // A crash between INCR and EXPIRE would leave a counter without TTL (a permanent lock-out): always repair a missing TTL.
+    if (count === 1 || ttl < 0) {
+      await redis.expire(k, windowSec);
+      ttl = windowSec;
+    }
     return { ok: count <= limit, limit, remaining: Math.max(0, limit - count), retryAfter: ttl > 0 ? ttl : windowSec };
   } catch {
     const now = Date.now();
+    if (memory.size > 5000) for (const [key, v] of memory) if (v.resetAt <= now) memory.delete(key); // Redis outage must not leak memory
     const cur = memory.get(k);
     if (!cur || cur.resetAt <= now) {
       memory.set(k, { count: 1, resetAt: now + windowSec * 1000 });

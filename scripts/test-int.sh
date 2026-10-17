@@ -9,4 +9,4 @@ bash scripts/services.sh start >/dev/null
 su postgres -c "psql -tc \"select 1 from pg_database where datname='asapawge_test'\"" | grep -q 1 || su postgres -c "psql -c 'create database asapawge_test owner asap'"
 DATABASE_URL="$DB_URL" pnpm --silent db:deploy >/dev/null
 DATABASE_URL="$DB_URL" pnpm --silent db:seed >/dev/null
-INTEGRATION_DATABASE_URL="$DB_URL" pnpm --filter @asap/web exec vitest run src/server/commerce.int src/server/admin/admin.int
+INTEGRATION_DATABASE_URL="$DB_URL" pnpm --filter @asap/web exec vitest run --no-file-parallelism src/server/commerce.int src/server/security.int src/server/admin/admin.int

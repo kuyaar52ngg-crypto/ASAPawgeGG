@@ -9,3 +9,7 @@
 **/*.log
 **/.pytest_cache
 packages/db/src/generated
+dump.rdb
+docs/screenshots
+**/test-results
+**/playwright-report
