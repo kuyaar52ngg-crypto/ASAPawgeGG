@@ -7,4 +7,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 EXPOSE 8000
 # API:  uvicorn app.main:app      Queue worker:  arq app.worker.WorkerSettings  (see docker-compose.yml)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
