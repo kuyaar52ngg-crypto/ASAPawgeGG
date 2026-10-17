@@ -13,8 +13,10 @@ export interface EnqueueResult {
  * Contract: POST {WORKER_URL}/internal/jobs/{name}  Authorization: Bearer {WORKER_INTERNAL_TOKEN}
  *           body: { args: {...}, delaySeconds?: number }  ->  { ok: true, jobId }
  * Never throws: failures are returned so callers can fall back (e.g. fulfil inline / retry via cron).
+ * The worker is optional: with WORKER_URL unset/empty (e.g. Vercel) this returns { ok: false, error: "worker disabled" } at once.
  */
 export async function enqueueJob(name: JobName, args: Record<string, unknown> = {}, opts: { delaySeconds?: number } = {}): Promise<EnqueueResult> {
+  if (!env.workerUrl) return { ok: false, error: "worker disabled" };
   try {
     const res = await fetch(`${env.workerUrl}/internal/jobs/${name}`, {
       method: "POST",

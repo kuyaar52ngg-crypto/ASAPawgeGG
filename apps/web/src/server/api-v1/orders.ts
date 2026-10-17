@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@asap/db";
-import { redis, withLock } from "@/lib/redis";
+import { redis, redisEnabled, withLock } from "@/lib/redis";
 import type { SessionUser } from "@/server/auth/session";
 import { parseItemMeta } from "@/server/cart/meta";
 import { CheckoutError, cancelOrder, createOrderFromItems, getOrderDelivery, loadOrderSourceItems } from "@/server/orders";
@@ -18,6 +18,21 @@ export async function getOwnOrder(buyerId: string, idOrNumber: string) {
 }
 
 const IDEM_TTL_SEC = 24 * 3600;
+
+/** Idempotency-Key -> order id. Redis when available, otherwise the `Setting` table (no Redis on Vercel); entries older than the TTL are ignored. */
+async function idemGet(key: string): Promise<string | null> {
+  if (redisEnabled) return redis.get(key).catch(() => null);
+  const row = await prisma.setting.findUnique({ where: { key }, select: { value: true, updatedAt: true } }).catch(() => null);
+  return row && typeof row.value === "string" && Date.now() - row.updatedAt.getTime() < IDEM_TTL_SEC * 1000 ? row.value : null;
+}
+
+async function idemSet(key: string, orderId: string): Promise<void> {
+  if (redisEnabled) {
+    await redis.set(key, orderId, "EX", IDEM_TTL_SEC).catch(() => {});
+    return;
+  }
+  await prisma.setting.upsert({ where: { key }, create: { key, value: orderId }, update: { value: orderId } }).catch(() => {});
+}
 
 async function waitForFulfilment(orderId: string, buyerId: string, maxMs: number) {
   const deadline = Date.now() + maxMs;
@@ -38,7 +53,7 @@ export async function placeOrderFromBalance(user: SessionUser, body: CreateOrder
 
   const run = async () => {
     if (idemKey) {
-      const prev = await redis.get(idemKey).catch(() => null);
+      const prev = await idemGet(idemKey);
       if (prev) {
         const existing = await getOwnOrder(user.id, prev);
         if (existing) return { order: existing, replay: true };
@@ -74,7 +89,7 @@ export async function placeOrderFromBalance(user: SessionUser, body: CreateOrder
       await cancelOrder(created.id, { buyerId: user.id });
       throw new ApiHttpError(/средств/i.test(paid.error) ? 402 : 409, /средств/i.test(paid.error) ? "insufficient_funds" : "payment_failed", paid.error);
     }
-    if (idemKey) await redis.set(idemKey, created.id, "EX", IDEM_TTL_SEC).catch(() => {});
+    if (idemKey) await idemSet(idemKey, created.id);
     const order = await waitForFulfilment(created.id, user.id, 4000);
     return { order: order!, replay: false };
   };

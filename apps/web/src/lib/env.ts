@@ -16,7 +16,15 @@ function hostnameOf(url: string): string {
     return "";
   }
 }
-const appUrl = e.APP_URL ?? e.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+/** Vercel system env vars carry a bare host; previews use the per-deployment URL, production the project's production domain. */
+function vercelUrl(): string | undefined {
+  const host = (e.VERCEL_ENV === "preview" ? e.VERCEL_URL : (e.VERCEL_PROJECT_PRODUCTION_URL ?? e.VERCEL_URL)) || e.VERCEL_URL;
+  return host ? `https://${host}` : undefined;
+}
+/** APP_URL -> NEXT_PUBLIC_APP_URL -> Vercel deployment URL -> localhost (local dev only). */
+const appUrl = e.APP_URL || e.NEXT_PUBLIC_APP_URL || vercelUrl() || "http://localhost:3000";
+/** Local-dev defaults for the optional backing services; never applied on Vercel / in production. */
+const localDefaults = !e.VERCEL && e.NODE_ENV !== "production";
 
 export const env = {
   nodeEnv: e.NODE_ENV ?? "development",
@@ -25,8 +33,10 @@ export const env = {
   /** true when the app is served from localhost (local stack / CI); false for a real public deployment */
   isLocalApp: ["localhost", "127.0.0.1", "[::1]", "::1"].includes(hostnameOf(appUrl)),
   databaseUrl: e.DATABASE_URL ?? "postgresql://asap:asap@localhost:5432/asapawge",
-  redisUrl: e.REDIS_URL ?? "redis://localhost:6379",
-  workerUrl: e.WORKER_URL ?? "http://localhost:8000",
+  /** empty = Redis disabled (see lib/redis.ts) */
+  redisUrl: e.REDIS_URL ?? (localDefaults ? "redis://localhost:6379" : ""),
+  /** empty = no Python worker: enqueueJob() returns { ok: false } immediately and callers fall back to inline work */
+  workerUrl: e.WORKER_URL ?? (localDefaults ? "http://localhost:8000" : ""),
   workerToken: e.WORKER_INTERNAL_TOKEN ?? "",
 
   platega: {

@@ -4,10 +4,19 @@ import { loadEnvConfig } from "@next/env";
 
 // Monorepo: load the ROOT .env (Next only reads apps/web/.env* by default).
 const monorepoRoot = path.resolve(process.cwd(), process.cwd().endsWith(path.join("apps", "web")) ? "../.." : ".");
-loadEnvConfig(monorepoRoot);
+loadEnvConfig(monorepoRoot); // no-op when the root .env is absent (Vercel / CI use real env vars)
+
+const onVercel = Boolean(process.env.VERCEL);
+
+// Vercel: when no public URL is configured, use the deployment's own domain (previews: unique URL, production: project domain).
+// NEXT_PUBLIC_APP_URL is inlined at build time, which makes metadata/sitemap/JSON-LD (and lib/env.ts) pick it up.
+const vercelHost = process.env.VERCEL_ENV === "preview" ? process.env.VERCEL_URL : (process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL);
+const publicAppUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || (onVercel && vercelHost ? `https://${vercelHost}` : undefined);
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Vercel produces its own function bundles; the standalone server is for Docker / self-hosting only
+  ...(onVercel ? {} : { output: "standalone" as const }),
+  ...(publicAppUrl ? { env: { NEXT_PUBLIC_APP_URL: publicAppUrl } } : {}),
   outputFileTracingRoot: monorepoRoot,
   // Workspace packages export raw TypeScript
   transpilePackages: ["@asap/db", "@asap/shared"],

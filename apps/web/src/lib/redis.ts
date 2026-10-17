@@ -1,10 +1,25 @@
 import "server-only";
 import Redis from "ioredis";
 
-const g = globalThis as unknown as { __asapRedis?: Redis };
+const g = globalThis as unknown as { __asapRedis?: Redis; __asapLocks?: Map<string, number> };
 
-function create(): Redis {
-  const client = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+/**
+ * Redis is optional. Disabled when REDIS_URL is set but empty, or unset on Vercel / in production
+ * (the localhost default exists for local dev only). When disabled no client is ever constructed:
+ * cache = pass-through, rate limit = in-memory, locks = per-instance (DB row locks / unique constraints are the real guards).
+ */
+export function resolveRedisUrl(e: NodeJS.ProcessEnv = process.env): string | null {
+  const url = e.REDIS_URL?.trim();
+  if (url) return url;
+  if (e.REDIS_URL !== undefined || e.VERCEL || e.NODE_ENV === "production") return null;
+  return "redis://localhost:6379";
+}
+
+const redisUrl = resolveRedisUrl();
+export const redisEnabled = redisUrl !== null;
+
+function create(url: string): Redis {
+  const client = new Redis(url, {
     maxRetriesPerRequest: 2,
     enableOfflineQueue: false,
     lazyConnect: false,
@@ -16,15 +31,38 @@ function create(): Redis {
   return client;
 }
 
-/** Singleton ioredis client. */
-export const redis: Redis = g.__asapRedis ?? create();
-if (process.env.NODE_ENV !== "production") g.__asapRedis = redis;
+function disabled(): never {
+  throw new Error("redis disabled");
+}
+
+/**
+ * Singleton ioredis client. With Redis disabled it is a stub whose commands reject immediately (no connection, no timeout);
+ * every consumer already treats a Redis error as "degrade gracefully".
+ */
+export const redis: Redis = redisUrl
+  ? (g.__asapRedis ?? create(redisUrl))
+  : (new Proxy({}, { get: () => async () => disabled() }) as unknown as Redis);
+if (redisUrl && process.env.NODE_ENV !== "production") g.__asapRedis = redis;
+
+/** Per-instance fallback lock (serverless: only guards double submits that hit the same instance). */
+function acquireLocalLock(key: string, ttlMs: number): null | (() => Promise<void>) {
+  const locks = (g.__asapLocks ??= new Map());
+  const now = Date.now();
+  const until = locks.get(key);
+  if (until !== undefined && until > now) return null;
+  const mine = now + ttlMs;
+  locks.set(key, mine);
+  return async () => {
+    if (locks.get(key) === mine) locks.delete(key);
+  };
+}
 
 /**
  * Distributed lock (SET NX PX). Returns a release fn or null if the lock is held.
  * Use for webhook idempotency, order fulfillment, etc.
  */
 export async function acquireLock(key: string, ttlMs = 30_000): Promise<null | (() => Promise<void>)> {
+  if (!redisEnabled) return acquireLocalLock(key, ttlMs);
   const token = crypto.randomUUID();
   const lockKey = `lock:${key}`;
   try {
@@ -55,6 +93,7 @@ export async function withLock<T>(key: string, ttlMs: number, fn: () => Promise<
 
 /** Tiny JSON cache helper. */
 export async function cached<T>(key: string, ttlSec: number, loader: () => Promise<T>): Promise<T> {
+  if (!redisEnabled) return loader();
   try {
     const hit = await redis.get(`cache:${key}`);
     if (hit) return JSON.parse(hit) as T;

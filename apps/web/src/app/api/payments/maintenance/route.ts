@@ -8,12 +8,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 function authorized(req: Request): boolean {
-  const token = env.workerToken;
-  if (!token) return false;
-  const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
-  const a = Buffer.from(given);
-  const b = Buffer.from(token);
-  return a.length === b.length && timingSafeEqual(a, b);
+  // WORKER_INTERNAL_TOKEN (worker cron) or CRON_SECRET (Vercel Cron sends it as a Bearer token)
+  const tokens = [env.workerToken, process.env.CRON_SECRET ?? ""].filter(Boolean);
+  const a = Buffer.from((req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, ""));
+  return tokens.some((token) => {
+    const b = Buffer.from(token);
+    return a.length === b.length && timingSafeEqual(a, b);
+  });
 }
 
 /**
@@ -30,3 +31,6 @@ export async function POST(req: Request) {
   const fulfilled = await sweepStuckPaidOrders();
   return NextResponse.json({ ok: true, data: { releasedReservations: released, cancelledOrders: cancelled, fulfilledOrders: fulfilled } });
 }
+
+/** Vercel Cron issues GET requests. */
+export const GET = POST;
