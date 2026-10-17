@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     hold_days: int = 3
     commission_default_bps: int = 1000
 
+    # AI
+    ai_timeout_seconds: float = 40.0
+    ai_auto_publish_threshold: int = 80
+
+    # Order housekeeping / delivery
+    pending_order_ttl_minutes: int = 30
+    fulfill_max_tries: int = 6
+    stuck_paid_grace_seconds: int = 60
+
     @property
     def async_database_url(self) -> str:
         """SQLAlchemy asyncpg URL (strip any ?schema= param Prisma-style URLs may carry)."""

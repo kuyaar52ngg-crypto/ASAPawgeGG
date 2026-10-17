@@ -27,9 +27,12 @@ const dayFmt = (iso: string) => {
 };
 
 function useMounted() {
-  const [m, setM] = React.useState(false);
-  React.useEffect(() => setM(true), []);
-  return m;
+  // false on the server and during hydration, true on the client afterwards
+  return React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 }
 
 function ChartBox({ height, children }: { height: number; children: React.ReactElement }) {

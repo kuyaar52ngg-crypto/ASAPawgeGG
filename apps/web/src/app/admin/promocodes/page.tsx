@@ -15,6 +15,7 @@ const rub = (kop: number) => String(kop / 100).replace(".", ",");
 export default async function AdminPromocodesPage() {
   await requireRole("ADMIN");
   const promos = await prisma.promoCode.findMany({ orderBy: { createdAt: "desc" }, include: { _count: { select: { orders: true } } } });
+  // eslint-disable-next-line react-hooks/purity -- per-request server render; the current time is intended
   const now = Date.now();
 
   return (

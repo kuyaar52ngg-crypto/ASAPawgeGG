@@ -49,28 +49,55 @@ export interface CreatedOrder {
  *  - reserves AUTO_STOCK keys with FOR UPDATE SKIP LOCKED in the same transaction
  * The cart is NOT cleared here (done after the payment was initiated, see payments/initiate.ts).
  */
-export async function createOrderFromCart(input: CreateOrderInput): Promise<CreatedOrder> {
-  await releaseExpiredReservationsThrottled();
+const cartItemInclude = {
+  product: { include: { variants: { where: { isActive: true }, select: { id: true, price: true, attributes: true } }, seller: { select: { id: true, banned: true, sellerProfile: { select: { commissionBps: true, status: true } } } } } },
+  variant: true,
+} satisfies Prisma.CartItemInclude;
 
+type CartItemRow = Prisma.CartItemGetPayload<{ include: typeof cartItemInclude }>;
+
+/**
+ * Lines an order is created from. Cart rows satisfy it as-is; zone F (REST API / MCP) builds the same shape from an
+ * explicit item list with {@link loadOrderSourceItems}, so both entry points share ONE pricing/stock/commission path.
+ */
+export type OrderSourceItem = Pick<CartItemRow, "quantity" | "meta" | "variantId" | "product" | "variant">;
+
+/** Loads products (+ variants, seller) for an explicit item list. Unknown product ids / variants throw CheckoutError. */
+export async function loadOrderSourceItems(items: { productId: string; variantId?: string | null; quantity: number; meta?: Prisma.InputJsonValue | null }[]): Promise<OrderSourceItem[]> {
+  const products = await prisma.product.findMany({ where: { id: { in: [...new Set(items.map((i) => i.productId))] } }, include: cartItemInclude.product.include });
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const variantIds = [...new Set(items.flatMap((i) => (i.variantId ? [i.variantId] : [])))];
+  const variants = variantIds.length ? await prisma.productVariant.findMany({ where: { id: { in: variantIds } } }) : [];
+  const variantById = new Map(variants.map((v) => [v.id, v]));
+  return items.map((i) => {
+    const product = byId.get(i.productId);
+    if (!product) throw new CheckoutError("Товар не найден", "UNAVAILABLE");
+    const variant = i.variantId ? (variantById.get(i.variantId) ?? null) : null;
+    if (i.variantId && (!variant || variant.productId !== product.id || !variant.isActive)) throw new CheckoutError(`«${product.title}»: вариант не найден или больше не продаётся`, "UNAVAILABLE");
+    if (!i.variantId && product.variants.length > 0) throw new CheckoutError(`«${product.title}»: выберите вариант товара`, "UNAVAILABLE");
+    return { quantity: i.quantity, meta: (i.meta ?? null) as OrderSourceItem["meta"], variantId: i.variantId ?? null, product, variant };
+  });
+}
+
+export async function createOrderFromCart(input: CreateOrderInput): Promise<CreatedOrder> {
   const cart = await prisma.cart.findUnique({
     where: { userId: input.userId },
-    include: {
-      items: {
-        orderBy: { createdAt: "asc" },
-        include: {
-          product: { include: { variants: { where: { isActive: true }, select: { id: true, price: true, attributes: true } }, seller: { select: { id: true, banned: true, sellerProfile: { select: { commissionBps: true, status: true } } } } } },
-          variant: true,
-        },
-      },
-    },
+    include: { items: { orderBy: { createdAt: "asc" }, include: cartItemInclude } },
   });
   if (!cart || cart.items.length === 0) throw new CheckoutError("Корзина пуста", "EMPTY_CART");
+  return createOrderFromItems(input, cart.items);
+}
+
+/** Creates the PENDING order from explicit lines (see {@link OrderSourceItem}); everything below is shared with the cart checkout. */
+export async function createOrderFromItems(input: CreateOrderInput, sourceItems: OrderSourceItem[]): Promise<CreatedOrder> {
+  await releaseExpiredReservationsThrottled();
+  if (sourceItems.length === 0) throw new CheckoutError("Корзина пуста", "EMPTY_CART");
 
   const defaultBps = await getSetting<number>(SETTING_KEYS.commissionDefaultBps, env.commissionDefaultBps);
-  const steamFee = cart.items.some((i) => i.product.type === "TOPUP") ? await getSteamFeePercent() : undefined;
+  const steamFee = sourceItems.some((i) => i.product.type === "TOPUP") ? await getSteamFeePercent() : undefined;
 
   // ── validate & price lines ──
-  const lines = cart.items.map((ci) => {
+  const lines = sourceItems.map((ci) => {
     const p = ci.product;
     if (p.status !== "ACTIVE" || p.seller.banned) throw new CheckoutError(`«${p.title}» больше не продаётся — удалите его из корзины`, "UNAVAILABLE");
     if (p.sellerId === input.userId) throw new CheckoutError("Нельзя купить собственный товар", "OWN_PRODUCT");

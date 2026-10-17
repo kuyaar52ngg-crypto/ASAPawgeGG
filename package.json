@@ -10,6 +10,8 @@
     "dev": "pnpm --filter @asap/web dev",
     "dev:all": "concurrently -n web,worker,mcp -c cyan,magenta,yellow \"pnpm --filter @asap/web dev\" \"pnpm worker:dev\" \"pnpm --filter @asap/mcp dev\"",
     "worker:dev": "cd apps/worker && .venv/bin/uvicorn app.main:app --reload --port 8000",
+    "worker:queue": "cd apps/worker && .venv/bin/arq app.worker.WorkerSettings",
+    "dev:worker": "concurrently -n api,queue -c magenta,yellow \"pnpm worker:dev\" \"pnpm worker:queue\"",
     "worker:test": "cd apps/worker && .venv/bin/pytest -q",
     "build": "pnpm --filter @asap/web build",
     "start": "pnpm --filter @asap/web start",

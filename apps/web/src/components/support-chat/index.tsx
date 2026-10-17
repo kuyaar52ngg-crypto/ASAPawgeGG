@@ -1,7 +1,2 @@
-/**
- * PLACEHOLDER (zone F owns this folder): floating AI support chat widget.
- * Replace the body with the real implementation; keep the `<SupportChat />` export — it is rendered in the root layout.
- */
-export function SupportChat() {
-  return null;
-}
+/** Zone F: floating AI support chat. Rendered once from the root layout; talks to POST /api/ai/chat (SSE). */
+export { SupportChat } from "./support-chat";

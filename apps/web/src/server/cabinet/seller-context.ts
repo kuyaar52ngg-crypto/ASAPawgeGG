@@ -61,3 +61,14 @@ export async function assertSeller(opts: { write?: boolean; verified?: boolean }
   if (opts.verified && !ctx.verified) throw new AuthError("FORBIDDEN", "Действие доступно после подтверждения профиля администратором");
   return ctx;
 }
+
+/**
+ * Seller context for a user authenticated by other means than the session cookie (zone F: API key / MCP).
+ * Same rules as `assertSeller`: role SELLER|ADMIN and an existing SellerProfile; `write` / `verified` are enforced by the caller via the flags.
+ */
+export async function sellerCtxForUser(user: SessionUser): Promise<SellerCtx> {
+  if (user.role !== "SELLER" && user.role !== "ADMIN") throw new AuthError("FORBIDDEN");
+  const profile = await loadProfile(user.id);
+  if (!profile) throw new AuthError("FORBIDDEN", "У вас нет профиля продавца");
+  return toCtx(user, profile);
+}

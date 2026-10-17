@@ -86,8 +86,12 @@ export async function saveSettings(ctx: AdminCtx, input: unknown) {
   const { section, values } = head.data;
   const parsed = sectionSchemas[section].safeParse(values);
   if (!parsed.success) {
-    const flat = z.flattenError(parsed.error);
-    return fail(parsed.error.issues[0]?.message ?? "Проверьте значения", flat.fieldErrors as Record<string, string[] | undefined>);
+    const fieldErrors: Record<string, string[] | undefined> = {};
+    for (const issue of parsed.error.issues) {
+      const key = String(issue.path[0] ?? "_");
+      (fieldErrors[key] ??= []).push(issue.message);
+    }
+    return fail(parsed.error.issues[0]?.message ?? "Проверьте значения", fieldErrors);
   }
   const before = await loadSettings();
   const writes: [string, unknown][] = [];

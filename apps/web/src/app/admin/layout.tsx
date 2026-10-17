@@ -1,4 +1,4 @@
-import { BarChart3, ClipboardList, FileText, FolderTree, LayoutDashboard, Percent, ScrollText, Settings, ShieldCheck, ShoppingBag, Sparkles, Store, Users, Wallet } from "lucide-react";
+import { BarChart3, ClipboardList, FolderTree, LayoutDashboard, Percent, ScrollText, Settings, ShieldCheck, ShoppingBag, Sparkles, Store, Users, Wallet } from "lucide-react";
 import { SiteHeader } from "@/components/layout/site-header";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { requireRole } from "@/server/auth/session";
@@ -26,7 +26,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           { href: "/admin/ai-logs", label: "AI-логи", icon: <Sparkles /> },
           { href: "/admin/audit", label: "Аудит-лог", icon: <ScrollText /> },
           { href: "/admin/settings", label: "Настройки", icon: <Settings /> },
-          { href: "/admin/docs", label: "Документация", icon: <FileText /> },
         ]}
       >
         {children}
