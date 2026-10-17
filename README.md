@@ -145,6 +145,44 @@ docker compose up -d --build web worker worker-jobs mcp
 
 ---
 
+## Деплой на Vercel + Supabase
+
+Разворачивается только `apps/web` (Vercel Hobby, **Root Directory = `apps/web`**, включите «Include source files outside of the Root Directory»). БД — Supabase Postgres. Redis и Python-воркер **не нужны**. Сборка и установка описаны в [`apps/web/vercel.json`](apps/web/vercel.json) (установка всего workspace из корня, `prisma generate` перед `next build`).
+
+**Переменные окружения (Vercel → Settings → Environment Variables):**
+
+| Переменная | Значение |
+|---|---|
+| `DATABASE_URL` | строка Supabase **Transaction pooler** (порт `6543`, `postgres.<ref>@…pooler.supabase.com`) — для приложения |
+| `DIRECT_URL` | прямое подключение (`db.<ref>.supabase.co:5432`) или Session pooler (`5432`) — только для миграций с вашей машины/CI |
+| `AUTH_SECRET` | `openssl rand -base64 32` |
+| `STOCK_ENCRYPTION_KEY` | `openssl rand -base64 32` (один раз; смена делает ключи на складе нечитаемыми) |
+| `WORKER_INTERNAL_TOKEN` | любой секрет ≥ 16 символов (нужен стартовой проверке и защищает `/api/payments/maintenance`) |
+| `CRON_SECRET` | то же значение, что `WORKER_INTERNAL_TOKEN` — Vercel Cron вызывает `/api/payments/maintenance` раз в сутки (лимит Hobby) |
+| `SANDBOX_WEBHOOK_SECRET` | свой секрет (иначе тестовая оплата отключается); платёжные ключи Platega/Rollypay, AI-ключи — по желанию |
+| `APP_URL`, `NEXT_PUBLIC_APP_URL` | необязательны: без них берётся `https://$VERCEL_PROJECT_PRODUCTION_URL` (превью — `$VERCEL_URL`). Для своего домена задайте явно |
+
+Не задавайте `REDIS_URL` и `WORKER_URL` — без них Redis и воркер отключены (никаких попыток подключиться к localhost, запросы не ждут таймаутов).
+
+**Пул подключений.** На Vercel каждый инстанс держит свой пул, поэтому по умолчанию `max=3` (`DATABASE_POOL_MAX` переопределяет). Для хостов `*.supabase.com/.co` соединение шифруется без проверки цепочки сертификатов (`DATABASE_SSL_STRICT=1` включает проверку). Prisma-адаптер `pg` использует только безымянные запросы, а блокировки (`SELECT … FOR UPDATE`) живут внутри интерактивных транзакций, поэтому transaction pooling совместим. Миграции через pooler на `6543` не запускайте — используйте `DIRECT_URL`:
+
+```bash
+DIRECT_URL='postgresql://postgres:…@db.<ref>.supabase.co:5432/postgres' pnpm db:deploy
+# демо-данные (ОЧИЩАЕТ БД!) — по желанию: DIRECT_URL=… pnpm db:seed
+```
+
+**Без Redis:** кэш — сквозной (данные считаются на каждый запрос), rate limit — в памяти инстанса (лимиты действуют в пределах одного инстанса), блокировки — локальные на инстанс; корректность держится на `FOR UPDATE`/уникальных ограничениях БД (идемпотентность вебхуков, выдача заказа, резерв склада). `Idempotency-Key` REST API хранится в таблице `Setting`.
+
+**Без воркера** (`enqueueJob` сразу возвращает `ok:false`) не работает:
+
+- выдача заказов выполняется сразу в самом запросе (AUTO_STOCK и sandbox-пополнения — работают; реальный поставщик Steam и AUTO_PROVIDER, который ведёт воркер, остаются в `PROCESSING`);
+- **освобождение холда** — продавцам не переводятся заработанные средства из холда в доступный баланс (job `release_holds`);
+- **истечение резервов и неоплаченных заказов** — выполняется лениво при создании заказа и раз в сутки по Vercel Cron (`/api/payments/maintenance`), а не раз в минуту;
+- **ежедневные снимки метрик** (`aggregate_daily_metrics`) — не создаются, дашборды считают данные на лету;
+- **AI-модерация товаров/отзывов и антифрод-скоринг** — товар после отправки остаётся в `PENDING_REVIEW` до решения администратора; кнопка «Перепроверить AI» работает inline.
+
+---
+
 ## Переменные окружения
 
 Полный список с комментариями — в [`.env.example`](.env.example). Все ключи внешних сервисов необязательны: без них включаются явно помеченные sandbox/mock-режимы.

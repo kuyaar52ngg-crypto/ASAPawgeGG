@@ -2,9 +2,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
-  "buildCommand": "cd ../.. && pnpm --filter @asap/db generate && pnpm --filter @asap/web build",
+  "buildCommand": "cd ../.. && pnpm --filter @asap/db generate && pnpm --filter @asap/db run db:deploy && pnpm --filter @asap/web build",
   "functions": {
-    "src/app/**/*": { "maxDuration": 60 }
+    "src/app/**/*": {
+      "maxDuration": 60
+    }
   },
-  "crons": [{ "path": "/api/payments/maintenance", "schedule": "0 3 * * *" }]
+  "crons": [
+    {
+      "path": "/api/payments/maintenance",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

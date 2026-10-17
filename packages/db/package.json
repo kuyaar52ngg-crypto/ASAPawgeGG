@@ -17,7 +17,8 @@
     "seed": "tsx prisma/seed.ts",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit",
-    "postinstall": "prisma generate || true"
+    "postinstall": "prisma generate || true",
+    "db:deploy": "tsx scripts/deploy-db.ts"
   },
   "dependencies": {
     "@asap/shared": "workspace:*",
