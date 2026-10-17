@@ -1,0 +1,38 @@
+const cols=await figma.variables.getLocalVariableCollectionsAsync();
+const CD=cols.find(c=>c.name==='Color'),CL=cols.find(c=>c.name==='Color Light'),CR=cols.find(c=>c.name==='Radius'),CS=cols.find(c=>c.name==='Spacing');
+const allV=await figma.variables.getLocalVariablesAsync();
+const V={},VL={},R={},S={};
+for(const v of allV){if(v.variableCollectionId===CD.id)V[v.name]=v;else if(v.variableCollectionId===CL.id)VL[v.name]=v;else if(v.variableCollectionId===CR.id)R[v.name.split('/')[1]]=v;else if(v.variableCollectionId===CS.id)S[v.name.split('/')[1]]=v;}
+const TS={};(await figma.getLocalTextStylesAsync()).forEach(s=>TS[s.name]=s);
+const ES={};(await figma.getLocalEffectStylesAsync()).forEach(s=>ES[s.name]=s);
+const GRAD=(await figma.getLocalPaintStylesAsync()).find(s=>s.name==='Brand/Gradient');
+for(const s of ['Bold','SemiBold'])await figma.loadFontAsync({family:'Unbounded',style:s});
+for(const s of ['Regular','Medium','SemiBold','Bold'])await figma.loadFontAsync({family:'Manrope',style:s});
+let VV=V;
+const P=(n)=>figma.variables.setBoundVariableForPaint({type:'SOLID',color:{r:0,g:0,b:0}},'color',VV[n]);
+const fill=(n,v)=>{n.fills=v?[P(v)]:[];return n;};
+const stroke=(n,v,w=1,al='INSIDE')=>{n.strokes=[P(v)];n.strokeWeight=w;n.strokeAlign=al;return n;};
+const rad=(n,k)=>{for(const f of ['topLeftRadius','topRightRadius','bottomLeftRadius','bottomRightRadius'])n.setBoundVariable(f,R[k]);return n;};
+const pad=(n,t,r,b,l)=>{if(r===undefined)r=t;if(b===undefined)b=t;if(l===undefined)l=r;const m={paddingTop:t,paddingRight:r,paddingBottom:b,paddingLeft:l};for(const k in m){const v=m[k];if(S[String(v)])n.setBoundVariable(k,S[String(v)]);else n[k]=v;}};
+const gap=(n,v)=>{if(S[String(v)])n.setBoundVariable('itemSpacing',S[String(v)]);else n.itemSpacing=v;};
+const F=(name,dir,o={})=>{const f=figma.createAutoLayout(dir);f.name=name;f.fills=[];f.clipsContent=!!o.clip;
+ if(o.fill)fill(f,o.fill);if(o.stroke)stroke(f,o.stroke,o.sw||1);if(o.r)rad(f,o.r);
+ if(o.p!==undefined){const p=Array.isArray(o.p)?o.p:[o.p];pad(f,...p);}
+ if(o.g!==undefined)gap(f,o.g);if(o.pa)f.primaryAxisAlignItems=o.pa;if(o.ca)f.counterAxisAlignItems=o.ca;return f;};
+const T=async(chars,style,color='text/foreground',name)=>{const t=figma.createText();await t.setTextStyleIdAsync(TS[style].id);t.characters=chars;t.fills=[P(color)];if(name)t.name=name;return t;};
+const glass=async(n)=>{fill(n,'bg/glass');stroke(n,'border/glass-border');await n.setEffectStyleIdAsync(ES['Glass'].id);return n;};
+const eff=async(n,name)=>{await n.setEffectStyleIdAsync(ES[name].id);};
+const grad=async(n)=>{await n.setFillStyleIdAsync(GRAD.id);};
+const add=(p,c,o={})=>{p.appendChild(c);if(o.fw)c.layoutSizingHorizontal='FILL';if(o.fh)c.layoutSizingVertical='FILL';return c;};
+const nextY=()=>{let y=0;for(const c of figma.currentPage.children)y=Math.max(y,c.y+c.height);return y?y+120:0;};
+const section=async(name,title,sub)=>{const s=F(name,'VERTICAL',{fill:'bg/background',p:48,g:32});s.resize(1600,100);s.primaryAxisSizingMode='AUTO';const yy=nextY();figma.currentPage.appendChild(s);s.x=0;s.y=yy;
+ const h=F('Header','VERTICAL',{g:8});add(s,h,{fw:1});add(h,await T(title,'H2'));if(sub){const t=await T(sub,'Body/M','text/muted-foreground');add(h,t);}return s;};
+const ICON={};(await figma.getNodeByIdAsync('6:2')).findAllWithCriteria({types:['COMPONENT']}).forEach(c=>ICON[c.name.replace('Icon/','')]=c);
+const ic=(name,size=16,color='text/foreground',filled)=>{const i=ICON[name].createInstance();i.name='icon/'+name;i.resize(size,size);const k=Math.max(2*size/24,1.25);i.findAll(n=>'strokes' in n&&n.strokes.length>0).forEach(n=>{n.strokes=[P(color)];n.strokeWeight=k;if(filled)n.fills=[P(filled)];});return i;};
+const setP=(inst,vals)=>{const cp=inst.componentProperties;const o={};for(const k in vals){const key=Object.keys(cp).find(x=>x===k||x.startsWith(k+'#'));if(key)o[key]=vals[k];else throw new Error('no prop '+k+' in '+Object.keys(cp));}inst.setProperties(o);};
+const layoutSet=(set,comps,cols,gx=24,gy=24,pd=24)=>{const rows=Math.ceil(comps.length/cols);const cw=Array(cols).fill(0),rh=Array(rows).fill(0);comps.forEach((c,i)=>{cw[i%cols]=Math.max(cw[i%cols],c.width);rh[Math.floor(i/cols)]=Math.max(rh[Math.floor(i/cols)],c.height);});
+ const xs=[],ys=[];let x=pd;cw.forEach((w,i)=>{xs[i]=x;x+=w+gx;});let y=pd;rh.forEach((h,i)=>{ys[i]=y;y+=h+gy;});
+ comps.forEach((c,i)=>{c.x=xs[i%cols];c.y=ys[Math.floor(i/cols)];});set.resizeWithoutConstraints(x-gx+pd,y-gy+pd);};
+const mkComp=(name,dir,o={})=>{const c=figma.createComponent();c.name=name;c.layoutMode=dir;c.primaryAxisSizingMode='AUTO';c.counterAxisSizingMode='AUTO';c.fills=[];c.clipsContent=!!o.clip;
+ if(o.fill)fill(c,o.fill);if(o.stroke)stroke(c,o.stroke,o.sw||1);if(o.r)rad(c,o.r);if(o.p!==undefined){const p=Array.isArray(o.p)?o.p:[o.p];pad(c,...p);}if(o.g!==undefined)gap(c,o.g);if(o.pa)c.primaryAxisAlignItems=o.pa;if(o.ca)c.counterAxisAlignItems=o.ca;return c;};
+const label=async(txt,sub)=>{const w=F('Label','VERTICAL',{g:4});add(w,await T(txt,'Heading/Card'));if(sub)add(w,await T(sub,'Body/S','text/muted-foreground'));return w;};
