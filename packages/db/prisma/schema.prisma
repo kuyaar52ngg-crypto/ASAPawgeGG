@@ -1,0 +1,817 @@
+// ASAPawge GG — database schema.
+// Money: ALWAYS integer kopecks (RUB). Never floats.
+// See docs/CONTRACTS.md for ledger / order lifecycle rules.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum Role {
+  USER
+  SELLER
+  ADMIN
+}
+
+enum SellerStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum ProductType {
+  KEY
+  ACCOUNT
+  SUBSCRIPTION
+  TOPUP
+  GIFT_CARD
+  CURRENCY
+  SERVICE
+}
+
+enum DeliveryMode {
+  AUTO_STOCK
+  AUTO_PROVIDER
+  MANUAL
+}
+
+enum ProductStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  REJECTED
+  ARCHIVED
+}
+
+enum StockStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  DELIVERED
+  DISPUTED
+  REFUNDED
+  CANCELLED
+  FAILED
+}
+
+enum OrderItemStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  PLATEGA
+  ROLLYPAY
+  BALANCE
+  SANDBOX
+}
+
+enum PaymentPurpose {
+  ORDER
+  BALANCE_TOPUP
+}
+
+enum PaymentStatus {
+  CREATED
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+enum LedgerAccountType {
+  USER_BALANCE
+  SELLER_HOLD
+  SELLER_AVAILABLE
+  PLATFORM_FEE
+  EXTERNAL
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+enum LedgerKind {
+  TOPUP
+  PURCHASE
+  HOLD_RELEASE
+  PAYOUT
+  PAYOUT_REVERSAL
+  REFUND
+  ADJUSTMENT
+}
+
+enum PayoutStatus {
+  REQUESTED
+  APPROVED
+  PAID
+  REJECTED
+  CANCELLED
+}
+
+enum ReviewStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+}
+
+enum DisputeStatus {
+  OPEN
+  SELLER_REPLIED
+  ESCALATED
+  RESOLVED_REFUND
+  RESOLVED_REJECTED
+  CLOSED
+}
+
+enum PromoType {
+  PERCENT
+  FIXED
+}
+
+enum NotificationType {
+  ORDER_PAID
+  ORDER_DELIVERED
+  ORDER_FAILED
+  PRODUCT_APPROVED
+  PRODUCT_REJECTED
+  PAYOUT_UPDATE
+  DISPUTE_UPDATE
+  REVIEW_NEW
+  SYSTEM
+}
+
+// ───────────────────────── Auth / Users ─────────────────────────
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  emailVerified    DateTime?
+  name             String?
+  image            String?
+  passwordHash     String?
+  role             Role      @default(USER)
+  /// Cached USER_BALANCE in kopecks. Source of truth is the ledger; update both in ONE transaction.
+  balance          Int       @default(0)
+  banned           Boolean   @default(false)
+  bannedReason     String?
+  twoFactorEnabled Boolean   @default(false)
+  twoFactorSecret  String?
+  locale           String    @default("ru")
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  sellerProfile    SellerProfile?
+  accounts         Account[]
+  sessions         Session[]
+  cart             Cart?
+  orders           Order[]         @relation("BuyerOrders")
+  payments         Payment[]
+  products         Product[]       @relation("SellerProducts")
+  reviews          Review[]        @relation("BuyerReviews")
+  favorites        Favorite[]
+  disputesOpened   Dispute[]       @relation("DisputeBuyer")
+  disputesAsSeller Dispute[]       @relation("DisputeSeller")
+  disputeMessages  DisputeMessage[]
+  payouts          Payout[]        @relation("SellerPayouts")
+  apiKeys          ApiKey[]
+  notifications    Notification[]
+  aiLogs           AiLog[]
+  auditLogs        AuditLog[]      @relation("AuditActor")
+  analyticsEvents  AnalyticsEvent[]
+
+  @@index([role])
+  @@index([createdAt])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model SellerProfile {
+  id               String       @id @default(cuid())
+  userId           String       @unique
+  shopName         String
+  slug             String       @unique
+  description      String?
+  avatar           String?
+  status           SellerStatus @default(PENDING)
+  /// Commission in basis points (1000 = 10%). NULL => use Setting "commission.defaultBps".
+  commissionBps    Int?
+  rating           Float        @default(0)
+  ratingCount      Int          @default(0)
+  salesCount       Int          @default(0)
+  /// Cached SELLER_HOLD / SELLER_AVAILABLE in kopecks (ledger is source of truth).
+  holdBalance      Int          @default(0)
+  availableBalance Int          @default(0)
+  payoutDetails    Json?
+  verifiedAt       DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([rating])
+}
+
+// ───────────────────────── Catalog ─────────────────────────
+
+model Category {
+  id          String   @id @default(cuid())
+  parentId    String?
+  name        String
+  slug        String   @unique
+  icon        String?
+  description String?
+  image       String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId, sortOrder])
+}
+
+model Product {
+  id               String        @id @default(cuid())
+  sellerId         String
+  categoryId       String
+  title            String
+  slug             String        @unique
+  shortDescription String?
+  description      String
+  type             ProductType
+  deliveryMode     DeliveryMode  @default(AUTO_STOCK)
+  status           ProductStatus @default(DRAFT)
+  /// Base ("from") price in kopecks. When variants exist = min active variant price.
+  price            Int
+  oldPrice         Int?
+  /// STEAM | XBOX | PLAYSTATION | NINTENDO | EPIC | EA | UBISOFT | BATTLENET | PC | MOBILE | OTHER (see @asap/shared PLATFORMS)
+  platform         String?
+  /// GLOBAL | RU | CIS | EU | TR | AR | US ...
+  region           String?
+  coverImage       String?
+  images           String[]
+  tags             String[]
+  attributes       Json?
+  salesCount       Int           @default(0)
+  viewCount        Int           @default(0)
+  ratingAvg        Float         @default(0)
+  ratingCount      Int           @default(0)
+  isFeatured       Boolean       @default(false)
+  moderationNote   String?
+  aiModeration     Json?
+  publishedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  seller      User            @relation("SellerProducts", fields: [sellerId], references: [id])
+  category    Category        @relation(fields: [categoryId], references: [id])
+  variants    ProductVariant[]
+  stockItems  StockItem[]
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  reviews     Review[]
+  favorites   Favorite[]
+
+  @@index([status, categoryId, price])
+  @@index([status, salesCount(sort: Desc)])
+  @@index([sellerId, status])
+  @@index([type])
+  @@index([platform])
+  @@index([region])
+  @@index([isFeatured, status])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Product_title_trgm_idx")
+}
+
+model ProductVariant {
+  id         String   @id @default(cuid())
+  productId  String
+  title      String
+  price      Int
+  oldPrice   Int?
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  /// e.g. { "months": 3 } or { "amountRub": 1000 }
+  attributes Json?
+  /// Supplier SKU for AUTO_PROVIDER delivery
+  providerSku String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockItems StockItem[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([productId, sortOrder])
+}
+
+model StockItem {
+  id             String      @id @default(cuid())
+  productId      String
+  variantId      String?
+  /// AES-256-GCM, base64( iv(12) | tag(16) | ciphertext ). See @asap/shared crypto + docs/CONTRACTS.md.
+  payloadEnc     String
+  /// sha256 hex of the plaintext (dedupe without decrypting)
+  fingerprint    String
+  status         StockStatus @default(AVAILABLE)
+  reservedUntil  DateTime?
+  orderItemId    String?
+  soldAt         DateTime?
+  createdAt      DateTime    @default(now())
+
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  orderItem OrderItem?      @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+
+  @@unique([productId, fingerprint])
+  @@index([productId, variantId, status])
+  @@index([orderItemId])
+  @@index([status, reservedUntil])
+}
+
+// ───────────────────────── Cart ─────────────────────────
+
+model Cart {
+  id         String     @id @default(cuid())
+  userId     String?    @unique
+  /// Guest carts: random token stored in an httpOnly cookie
+  guestToken String?    @unique
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  user  User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  variantId String?
+  quantity  Int      @default(1)
+  /// Extra buyer input, e.g. { "steamLogin": "abc" } for TOPUP products
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  cart    Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([cartId])
+}
+
+// ───────────────────────── Orders / Payments ─────────────────────────
+
+model Order {
+  id             String      @id @default(cuid())
+  /// Human readable, e.g. "AG-240117-8F3K"
+  number         String      @unique
+  buyerId        String
+  /// Delivery email (defaults to buyer email)
+  email          String
+  status         OrderStatus @default(PENDING)
+  subtotal       Int
+  discount       Int         @default(0)
+  total          Int
+  currency       String      @default("RUB")
+  promoCodeId    String?
+  /// Fraud score 0..100 (AI / heuristics)
+  fraudScore     Int?
+  ip             String?
+  userAgent      String?
+  meta           Json?
+  paidAt         DateTime?
+  deliveredAt    DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  buyer     User        @relation("BuyerOrders", fields: [buyerId], references: [id])
+  promoCode PromoCode?  @relation(fields: [promoCodeId], references: [id])
+  items     OrderItem[]
+  payments  Payment[]
+  disputes  Dispute[]
+  ledger    LedgerEntry[]
+
+  @@index([buyerId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id               String          @id @default(cuid())
+  orderId          String
+  productId        String
+  variantId        String?
+  sellerId         String
+  /// Snapshots at purchase time
+  title            String
+  variantTitle     String?
+  unitPrice        Int
+  quantity         Int             @default(1)
+  total            Int
+  /// Commission snapshot (basis points) and amounts in kopecks
+  commissionBps    Int
+  commissionAmount Int
+  sellerEarning    Int
+  status           OrderItemStatus @default(PENDING)
+  /// Buyer input (steam login...) and provider result for AUTO_PROVIDER / MANUAL delivery
+  meta             Json?
+  deliveryData     Json?
+  deliveredAt      DateTime?
+  /// Seller funds move SELLER_HOLD -> SELLER_AVAILABLE at holdReleaseAt (set on delivery)
+  holdReleaseAt    DateTime?
+  holdReleased     Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+
+  order      Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product         @relation(fields: [productId], references: [id])
+  variant    ProductVariant? @relation(fields: [variantId], references: [id])
+  /// Delivered keys / credentials (decrypt payloadEnc)
+  stockItems StockItem[]
+  review     Review?
+  disputes   Dispute[]
+  ledger     LedgerEntry[]
+
+  @@index([orderId])
+  @@index([sellerId, createdAt])
+  @@index([productId])
+  @@index([holdReleased, holdReleaseAt])
+}
+
+model Payment {
+  id          String          @id @default(cuid())
+  orderId     String?
+  userId      String
+  provider    PaymentProvider
+  purpose     PaymentPurpose  @default(ORDER)
+  /// Provider-side transaction id (idempotency key together with provider)
+  externalId  String?
+  status      PaymentStatus   @default(CREATED)
+  amount      Int
+  currency    String          @default("RUB")
+  method      String?
+  paymentUrl  String?
+  raw         Json?
+  paidAt      DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  order  Order? @relation(fields: [orderId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+  ledger LedgerEntry[]
+
+  @@unique([provider, externalId])
+  @@index([orderId])
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+/// Dedup table for incoming provider webhooks (insert first; unique violation => already handled).
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  provider    PaymentProvider
+  eventId     String
+  payload     Json
+  processedAt DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([provider, eventId])
+}
+
+/// Double-entry ledger. Entries sharing `txId` MUST have sum(DEBIT) == sum(CREDIT).
+/// Balance of an account = sum(CREDIT) - sum(DEBIT) for USER_BALANCE / SELLER_* / PLATFORM_FEE,
+/// and sum(DEBIT) - sum(CREDIT) for EXTERNAL (money that left/entered the system boundary).
+model LedgerEntry {
+  id          String            @id @default(cuid())
+  txId        String
+  kind        LedgerKind
+  account     LedgerAccountType
+  /// User id for USER_BALANCE / SELLER_*; NULL for PLATFORM_FEE / EXTERNAL
+  ownerId     String?
+  direction   LedgerDirection
+  amount      Int
+  orderId     String?
+  orderItemId String?
+  paymentId   String?
+  payoutId    String?
+  memo        String?
+  createdAt   DateTime          @default(now())
+
+  order     Order?     @relation(fields: [orderId], references: [id])
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
+  payment   Payment?   @relation(fields: [paymentId], references: [id])
+  payout    Payout?    @relation(fields: [payoutId], references: [id])
+
+  @@index([txId])
+  @@index([account, ownerId, createdAt])
+  @@index([orderId])
+  @@index([kind, createdAt])
+}
+
+model Payout {
+  id          String       @id @default(cuid())
+  sellerId    String
+  amount      Int
+  fee         Int          @default(0)
+  status      PayoutStatus @default(REQUESTED)
+  /// CARD | SBP | USDT | YOOMONEY ...
+  method      String
+  details     Json
+  note        String?
+  processedById String?
+  processedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  seller User          @relation("SellerPayouts", fields: [sellerId], references: [id])
+  ledger LedgerEntry[]
+
+  @@index([sellerId, createdAt])
+  @@index([status])
+}
+
+model PromoCode {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  type         PromoType
+  /// PERCENT: 1..100; FIXED: kopecks
+  value        Int
+  minOrder     Int       @default(0)
+  maxDiscount  Int?
+  maxUses      Int?
+  usedCount    Int       @default(0)
+  perUserLimit Int       @default(1)
+  expiresAt    DateTime?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+
+  orders Order[]
+}
+
+// ───────────────────────── Social ─────────────────────────
+
+model Review {
+  id          String       @id @default(cuid())
+  orderItemId String       @unique
+  productId   String
+  sellerId    String
+  buyerId     String
+  rating      Int
+  text        String?
+  reply       String?
+  repliedAt   DateTime?
+  status      ReviewStatus @default(PUBLISHED)
+  aiFlags     Json?
+  createdAt   DateTime     @default(now())
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  buyer     User      @relation("BuyerReviews", fields: [buyerId], references: [id])
+
+  @@index([productId, status, createdAt(sort: Desc)])
+  @@index([sellerId, createdAt])
+}
+
+model Favorite {
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([userId, productId])
+}
+
+model Dispute {
+  id             String        @id @default(cuid())
+  orderId        String
+  orderItemId    String?
+  buyerId        String
+  sellerId       String
+  reason         String
+  status         DisputeStatus @default(OPEN)
+  aiSuggestion   Json?
+  resolution     String?
+  resolvedById   String?
+  resolvedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  order     Order            @relation(fields: [orderId], references: [id])
+  orderItem OrderItem?       @relation(fields: [orderItemId], references: [id])
+  buyer     User             @relation("DisputeBuyer", fields: [buyerId], references: [id])
+  seller    User             @relation("DisputeSeller", fields: [sellerId], references: [id])
+  messages  DisputeMessage[]
+
+  @@index([status, createdAt])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([orderId])
+}
+
+model DisputeMessage {
+  id          String   @id @default(cuid())
+  disputeId   String
+  authorId    String?
+  /// USER | SELLER | ADMIN | AI | SYSTEM
+  authorRole  String
+  body        String
+  attachments String[]
+  createdAt   DateTime @default(now())
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  author  User?   @relation(fields: [authorId], references: [id])
+
+  @@index([disputeId, createdAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType @default(SYSTEM)
+  title     String
+  body      String?
+  link      String?
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+}
+
+// ───────────────────────── Platform ─────────────────────────
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  /// First chars of the key shown in UI, e.g. "ak_live_a1b2c3d4"
+  prefix     String
+  /// sha256 hex of the full key. Key format: "ak_live_" + 32 random base62/hex chars
+  hash       String    @unique
+  scopes     String[]
+  /// Effective role snapshot (never higher than user's role)
+  role       Role      @default(USER)
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([prefix])
+}
+
+model AiLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  /// openai | anthropic | openrouter | mock
+  provider   String
+  model      String
+  /// moderation | describe | seo | support_chat | fraud | dispute | metrics_summary | ...
+  task       String
+  input      Json?
+  output     Json?
+  tokensIn   Int      @default(0)
+  tokensOut  Int      @default(0)
+  latencyMs  Int      @default(0)
+  ok         Boolean  @default(true)
+  error      String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([task, createdAt])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+model AnalyticsEvent {
+  id         String   @id @default(cuid())
+  /// see docs/CONTRACTS.md "Analytics events"
+  name       String
+  userId     String?
+  sessionId  String?
+  path       String?
+  referrer   String?
+  properties Json?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([name, createdAt])
+  @@index([createdAt])
+  @@index([sessionId])
+  @@index([userId, createdAt])
+}
+
+/// One row per UTC day, written by worker job `aggregate_daily_metrics`.
+model DailyMetric {
+  date            DateTime @id @db.Date
+  gmv             Int      @default(0)
+  platformRevenue Int      @default(0)
+  ordersCreated   Int      @default(0)
+  ordersPaid      Int      @default(0)
+  newUsers        Int      @default(0)
+  activeUsers     Int      @default(0)
+  sessions        Int      @default(0)
+  refunds         Int      @default(0)
+  avgOrderValue   Int      @default(0)
+  /// funnel counts, top products/sellers, etc.
+  data            Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Setting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}

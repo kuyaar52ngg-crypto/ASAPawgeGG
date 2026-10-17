@@ -1,0 +1,30 @@
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+.env
+.env.local
+.env.*.local
+!.env.example
+.DS_Store
+*.log
+.turbo/
+playwright-report/
+test-results/
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+# prisma generated client
+packages/db/src/generated/
+# local runtime
+.run/
+dump.rdb

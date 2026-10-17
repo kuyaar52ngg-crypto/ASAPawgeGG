@@ -1,0 +1,35 @@
+{
+  "name": "asapawge-gg",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @asap/web dev",
+    "dev:all": "concurrently -n web,worker,mcp -c cyan,magenta,yellow \"pnpm --filter @asap/web dev\" \"pnpm worker:dev\" \"pnpm --filter @asap/mcp dev\"",
+    "worker:dev": "cd apps/worker && .venv/bin/uvicorn app.main:app --reload --port 8000",
+    "worker:test": "cd apps/worker && .venv/bin/pytest -q",
+    "build": "pnpm --filter @asap/web build",
+    "start": "pnpm --filter @asap/web start",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "db:generate": "pnpm --filter @asap/db generate",
+    "db:migrate": "pnpm --filter @asap/db migrate",
+    "db:deploy": "pnpm --filter @asap/db migrate:deploy",
+    "db:seed": "pnpm --filter @asap/db seed",
+    "db:reset": "pnpm --filter @asap/db reset",
+    "db:studio": "pnpm --filter @asap/db studio",
+    "services:start": "bash scripts/services.sh start",
+    "services:stop": "bash scripts/services.sh stop"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "concurrently": "^9.2.5",
+    "tsx": "^4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

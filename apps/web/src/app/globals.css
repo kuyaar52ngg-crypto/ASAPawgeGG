@@ -1,0 +1,206 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Dark is the DEFAULT theme (html.dark). html.light switches to the light palette. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ───────────── Design tokens ─────────────
+   Raw palette lives in CSS variables (so it can switch with the theme);
+   @theme inline maps them to Tailwind utilities: bg-background, text-foreground, border-border, bg-primary, ... */
+:root {
+  color-scheme: light;
+  --background: #f5f6fb;
+  --foreground: #0d1024;
+  --surface: #ffffff;
+  --surface-2: #eef0f8;
+  --card: rgba(255, 255, 255, 0.82);
+  --card-foreground: #0d1024;
+  --popover: #ffffff;
+  --popover-foreground: #0d1024;
+  --muted: #e9ebf5;
+  --muted-foreground: #5b6285;
+  --border: rgba(13, 16, 36, 0.1);
+  --input: rgba(13, 16, 36, 0.14);
+  --ring: #7c3aed;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #e4e7f5;
+  --secondary-foreground: #1b1f3d;
+  --accent: #0891b2;
+  --accent-foreground: #ffffff;
+  --success: #059669;
+  --warning: #d97706;
+  --destructive: #dc2626;
+  --glow-violet: rgba(124, 58, 237, 0.25);
+  --glow-cyan: rgba(8, 145, 178, 0.25);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(13, 16, 36, 0.08);
+  --radius: 1rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #070914;
+  --foreground: #eceefe;
+  --surface: #0d1022;
+  --surface-2: #131732;
+  --card: rgba(255, 255, 255, 0.045);
+  --card-foreground: #eceefe;
+  --popover: #0f1328;
+  --popover-foreground: #eceefe;
+  --muted: #141836;
+  --muted-foreground: #8d94bd;
+  --border: rgba(255, 255, 255, 0.09);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #a78bfa;
+  --primary: #8b5cf6;
+  --primary-foreground: #ffffff;
+  --secondary: #1a1f45;
+  --secondary-foreground: #dfe2ff;
+  --accent: #22d3ee;
+  --accent-foreground: #04121a;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --destructive: #f87171;
+  --glow-violet: rgba(139, 92, 246, 0.35);
+  --glow-cyan: rgba(34, 211, 238, 0.28);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.09);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-destructive: var(--destructive);
+
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-unbounded), var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --shadow-glow: 0 0 0 1px var(--glass-border), 0 8px 40px -8px var(--glow-violet);
+  --shadow-glow-cyan: 0 0 0 1px var(--glass-border), 0 8px 40px -8px var(--glow-cyan);
+
+  --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-glow: pulse-glow 2.6s ease-in-out infinite;
+
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 var(--glow-violet); }
+    50% { box-shadow: 0 0 28px 4px var(--glow-violet); }
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    min-height: 100dvh;
+    background-image:
+      radial-gradient(900px 480px at 8% -8%, var(--glow-violet), transparent 60%),
+      radial-gradient(760px 420px at 96% 4%, var(--glow-cyan), transparent 60%);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+  }
+  h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -0.01em; }
+  ::selection { background: color-mix(in oklab, var(--primary) 45%, transparent); }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+}
+
+/* ───────────── Reusable design utilities ───────────── */
+@utility glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+@utility gradient-brand {
+  background-image: linear-gradient(135deg, #8b5cf6 0%, #6366f1 45%, #22d3ee 100%);
+}
+
+@utility gradient-brand-text {
+  background-image: linear-gradient(120deg, #a78bfa 0%, #818cf8 40%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility gradient-border {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.7), rgba(34, 211, 238, 0.5), transparent 70%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
+@utility glow-hover {
+  transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+  &:hover { box-shadow: var(--shadow-glow); border-color: color-mix(in oklab, var(--primary) 45%, var(--border)); }
+}
+
+@utility skeleton {
+  background: linear-gradient(90deg, var(--muted) 25%, color-mix(in oklab, var(--muted) 60%, var(--foreground) 8%) 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+@utility container-page {
+  width: 100%;
+  max-width: 80rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  @media (min-width: 640px) { padding-inline: 1.5rem; }
+  @media (min-width: 1024px) { padding-inline: 2rem; }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+/* Elements animated by GSAP start hidden only when JS is on (see <Reveal />) */
+.js [data-reveal] { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .js [data-reveal] { opacity: 1; } }

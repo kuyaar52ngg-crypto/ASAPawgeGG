@@ -1,0 +1,120 @@
+# ASAPawge GG — full stack.   docker compose up -d --build
+# First run:  docker compose run --rm migrate  &&  docker compose run --rm migrate pnpm db:seed   (demo data)
+name: asapawge
+
+x-env: &app-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-asap}:${POSTGRES_PASSWORD:-asap}@postgres:5432/${POSTGRES_DB:-asapawge}
+  REDIS_URL: redis://redis:6379
+  APP_URL: ${APP_URL:-http://localhost:3000}
+  NEXT_PUBLIC_APP_URL: ${APP_URL:-http://localhost:3000}
+  AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+  AUTH_TRUST_HOST: "true"
+  STOCK_ENCRYPTION_KEY: ${STOCK_ENCRYPTION_KEY:?set STOCK_ENCRYPTION_KEY in .env}
+  WORKER_URL: http://worker:8000
+  WORKER_INTERNAL_TOKEN: ${WORKER_INTERNAL_TOKEN:?set WORKER_INTERNAL_TOKEN in .env}
+  WEB_INTERNAL_URL: http://web:3000
+  PLATEGA_MERCHANT_ID: ${PLATEGA_MERCHANT_ID:-}
+  PLATEGA_SECRET: ${PLATEGA_SECRET:-}
+  PLATEGA_API_URL: ${PLATEGA_API_URL:-https://app.platega.io}
+  ROLLYPAY_API_KEY: ${ROLLYPAY_API_KEY:-}
+  ROLLYPAY_SECRET: ${ROLLYPAY_SECRET:-}
+  ROLLYPAY_API_URL: ${ROLLYPAY_API_URL:-https://api.rollypay.io}
+  SANDBOX_WEBHOOK_SECRET: ${SANDBOX_WEBHOOK_SECRET:-dev-sandbox-webhook-secret}
+  ALLOW_SANDBOX_PAYMENTS: ${ALLOW_SANDBOX_PAYMENTS:-}
+  PLATEGA_CREATE_PATH: ${PLATEGA_CREATE_PATH:-/transaction/process}
+  PLATEGA_STATUS_PATH: ${PLATEGA_STATUS_PATH:-/transaction/{id}}
+  PLATEGA_MERCHANT_HEADER: ${PLATEGA_MERCHANT_HEADER:-X-MerchantId}
+  PLATEGA_SECRET_HEADER: ${PLATEGA_SECRET_HEADER:-X-Secret}
+  PLATEGA_METHOD_SBP: ${PLATEGA_METHOD_SBP:-2}
+  PLATEGA_METHOD_CARD: ${PLATEGA_METHOD_CARD:-10}
+  ROLLYPAY_CREATE_PATH: ${ROLLYPAY_CREATE_PATH:-/v1/invoices}
+  ROLLYPAY_STATUS_PATH: ${ROLLYPAY_STATUS_PATH:-/v1/invoices/{id}}
+  ROLLYPAY_AUTH_HEADER: ${ROLLYPAY_AUTH_HEADER:-Authorization}
+  ROLLYPAY_SIGNATURE_HEADER: ${ROLLYPAY_SIGNATURE_HEADER:-x-signature}
+  AI_PROVIDER: ${AI_PROVIDER:-mock}
+  AI_MODEL: ${AI_MODEL:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  NEXT_PUBLIC_YM_ID: ${NEXT_PUBLIC_YM_ID:-}
+  STEAM_TOPUP_PROVIDER: ${STEAM_TOPUP_PROVIDER:-mock}
+  STEAM_TOPUP_API_URL: ${STEAM_TOPUP_API_URL:-}
+  STEAM_TOPUP_API_KEY: ${STEAM_TOPUP_API_KEY:-}
+  COMMISSION_DEFAULT_BPS: ${COMMISSION_DEFAULT_BPS:-1000}
+  HOLD_DAYS: ${HOLD_DAYS:-3}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-asap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-asap}
+      POSTGRES_DB: ${POSTGRES_DB:-asapawge}
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-asap} -d ${POSTGRES_DB:-asapawge}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: { context: ., dockerfile: apps/web/Dockerfile, target: tools }
+    profiles: [tools]
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    restart: unless-stopped
+    environment: *app-env
+    ports: ["3000:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker:
+    build: { context: apps/worker }
+    restart: unless-stopped
+    environment: *app-env
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker-jobs:
+    build: { context: apps/worker }
+    restart: unless-stopped
+    command: ["arq", "app.worker.WorkerSettings"]
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  mcp:
+    build: { context: ., dockerfile: apps/mcp/Dockerfile }
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      MCP_PORT: "3333"
+      MCP_API_BASE_URL: http://web:3000/api/v1
+    ports: ["3333:3333"]
+    depends_on: [web]
+
+volumes:
+  pgdata:
+  redisdata:
